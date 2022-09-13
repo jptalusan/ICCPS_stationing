@@ -1,4 +1,5 @@
 
+from Environment.EmpiricalTravelModel import EmpiricalTravelModel
 from decision_making.coordinator.DoNothing import DoNothing as Coord_DoNothing
 from decision_making.dispatch.DoNothing import DoNothing as Dispatch_DoNothing
 from Environment.Simulator import Simulator
@@ -44,7 +45,7 @@ if __name__ == '__main__':
         bus_plan = dotdict(json.load(f))
         
     print(trip_plan['246346'])
-    travel_model = None
+    travel_model = EmpiricalTravelModel()
     sim_environment = EnvironmentModel(travel_model)
     do_nothing_dispatcher = Dispatch_DoNothing(travel_model)
     do_nothing_coordinator = Coord_DoNothing(sim_environment, travel_model, do_nothing_dispatcher)
