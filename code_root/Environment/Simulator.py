@@ -26,6 +26,21 @@ class Simulator:
         
         while len(self.event_queue) > 0:
             self.update_sim_info()
+        
+            curr_event = self.event_queue.pop(0)
+            print("Popped:", curr_event.time)
+                        
+            # for b_id, b_obj in self.state.buses.items():
+            #     self.logger.debug(f"{b_obj}")
+                
+            self.environment_model.update(self.state, curr_event)
+            
+            # self.logger.debug("after")
+            # for b_id, b_obj in self.state.buses.items():
+            #     self.logger.debug(f"{b_obj}")
+            # self.logger.debug(f".--.")
+            
+            new_events = self.event_processing_callback(self.state, curr_event)
             pass
         
         
