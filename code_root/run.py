@@ -19,8 +19,6 @@ import spdlog as spd
 import numpy as np
 import pandas as pd
 
-EARLY_PASSENGER_DELTA_MIN = 1
-
 def load_initial_state(bus_plan, trip_plan, random_seed=100):
     active_stops = []
     
@@ -61,7 +59,9 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
         Stops[active_stop] = stop
     return Buses, Stops
     
-def load_events(starting_date, Buses, Stops, trip_plan):
+def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
+    np.random.seed(random_seed)
+    has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
     sampled_load = pd.read_pickle('scenarios/baseline/data/sampled_load.pkl')
@@ -111,11 +111,28 @@ def load_events(starting_date, Buses, Stops, trip_plan):
                 # making sure passengers arrives before the bus
                 event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
                 
-                event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP, time=event_datetime, type_specific_information={'stop_id': stop_id_original[i], 
-                                                                                                                          'ons':ons, 
-                                                                                                                          'load':load})
+                event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP, 
+                              time=event_datetime, 
+                              type_specific_information={'stop_id': stop_id_original[i], 
+                                                        'ons':ons, 
+                                                        'load':load})
                 events.append(event)
-        pass
+                
+                # people will leave after N minutes.
+                event = Event(event_type=EventType.PASSENGER_LEAVE_STOP, 
+                              time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
+                              type_specific_information={'stop_id': stop_id_original[i], 
+                                                         'time':event_datetime})
+                events.append(event)
+                
+                # # probability that a bus breaks down
+                # if np.random.uniform(0, 1) > 0.900 and not has_broken:
+                #     has_broken = True
+                #     print("BROKEN!")
+                #     event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
+                #                   time=event_datetime + dt.timedelta(minutes=np.random.randint(0, 10)),
+                #                   type_specific_information={'bus_id': bus_id})
+                #     events.append(event)
     
     events.sort(key=lambda x: x.time, reverse=False)
     # [print(event) for event in events]

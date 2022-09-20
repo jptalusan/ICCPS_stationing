@@ -1,7 +1,5 @@
-
-    
-from Environment.enums import EventType
-
+from src.utils import *
+from Environment.enums import EventType, BusStatus
 
 class DoNothing:
     
@@ -34,6 +32,15 @@ class DoNothing:
             return new_events
         
         elif curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            type_specific_information = curr_event.type_specific_information
+            bus_id = type_specific_information['bus_id']
+            bus_obj = state.buses[bus_id]
+            current_block_trip = bus_obj.current_block_trip
+            current_stop_number = bus_obj.current_stop_number
+            current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
+            bus_obj.status = BusStatus.BROKEN
+            
+            log(self.logger, curr_event.time, f"Vehicle {bus_id} broke down at stop {current_stop_id}", LogType.DEBUG)
             new_events = []
             return new_events
         
@@ -42,6 +49,7 @@ class DoNothing:
             return new_events
         
         elif curr_event.event_type == EventType.PASSENGER_LEAVE_STOP:
+            log(self.logger, curr_event.time, "People left the stop, setup action...", LogType.DEBUG)
             new_events = []
             return new_events
         

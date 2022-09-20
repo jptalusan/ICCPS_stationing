@@ -1,6 +1,12 @@
+import re
 from src.utils import *
 import json
+import warnings
 import pandas as pd
+from pandas.core.common import SettingWithCopyWarning
+
+warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModel:
@@ -23,14 +29,35 @@ class EmpiricalTravelModel:
         pass
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
-    def get_travel_time(self, current_block_trip, current_stop, _datetime):
-        IsWeekend = 0 if _datetime.weekday() < 5 else 1
-        time = _datetime.time().strftime('%H:%M:%S')
-        block_abbr = current_block_trip[0]
-        trip = current_block_trip[1]
-        stop_id_original = current_stop
+    def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
+        current_trip       = current_block_trip[1]
+        IsWeekend          = 0 if _datetime.weekday() < 5 else 1
+        # time               = _datetime.time().strftime('%H:%M:%S')
+        block_abbr         = int(current_block_trip[0])
         
-        pass
+        trip_data          = self.trip_plan[current_trip]
+        route_id           = trip_data['route_id']
+        route_direction    = trip_data['route_direction']
+        route_id_dir       = str(route_id) + "_" + route_direction
+        stop_id_original   = trip_data['stop_id_original']
+        stop_id_original   = stop_id_original[current_stop_number]
+        
+        scheduled_time     = self.trip_plan[current_trip]['scheduled_time'][current_stop_number].split(" ")[1]
+        
+        # print(scheduled_time, route_id_dir, block_abbr, current_stop_number + 1, stop_id_original, IsWeekend)
+        tdf = self.sampled_travel_time[(self.sampled_travel_time['route_id_direction'] == route_id_dir) & \
+                                       (self.sampled_travel_time['block_abbr'] == block_abbr) & \
+                                       (self.sampled_travel_time['stop_sequence'] == current_stop_number + 1) & \
+                                       (self.sampled_travel_time['stop_id_original'] == stop_id_original) & \
+                                       (self.sampled_travel_time['IsWeekend'] == IsWeekend)]
+        tdf['time'] = pd.to_datetime(tdf['time'], format='%H:%M:%S')
+        
+        tdf = tdf[tdf['time'] == f'1900-01-01 {scheduled_time}']
+        if not tdf.empty:
+            print(scheduled_time, current_stop_number + 1, stop_id_original, tdf.iloc[0]['sample_time_to_next_stop'])
+            return tdf.iloc[0]['sample_time_to_next_stop']
+        # TODO: Handle when not available!
+        return self.get_travel_time_from_depot()
     
     #TODO: Add OSM computation
     def get_travel_time_from_depot(self):
@@ -51,8 +78,25 @@ class EmpiricalTravelModel:
         last_stop_id = trip_data['last_stop_id']
         last_stop_sequence = trip_data['last_stop_sequence']
         
+        if current_stop_sequence == None:
+            return None
+        
         if current_stop_sequence == last_stop_sequence:
             return None
         
         else:
             return trip_data['stop_sequence'][current_stop_sequence + 1]
+        
+    def get_stop_id_at_number(self, current_block_trip, current_stop_sequence):
+        if current_stop_sequence == -1:
+            return None
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        return trip_data['stop_id_original'][current_stop_sequence]
+        
+    def get_scheduled_arrival_time(self, current_block_trip, current_stop_sequence):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        arrival_time_str = trip_data['scheduled_time'][current_stop_sequence]
+        scheduled_arrival_time = str_timestamp_to_datetime(arrival_time_str)
+        return scheduled_arrival_time

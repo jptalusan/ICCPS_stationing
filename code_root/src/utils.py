@@ -5,6 +5,8 @@ from Environment.enums import LogType
 
 GMT5 = 18000
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+PASSENGER_TIME_TO_LEAVE = 30 #minutes
+EARLY_PASSENGER_DELTA_MIN = 1
 
 def convert_pandas_dow_to_pyspark(pandas_dow):
     return (pandas_dow + 1) % 7 + 1
