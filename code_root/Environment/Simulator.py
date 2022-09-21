@@ -70,9 +70,9 @@ class Simulator:
             log(self.logger, dt.datetime.now(), f"total_service_time: {bus_obj.total_service_time}")
             log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}")
             
-        for stop_id, stop_obj in self.state.stops.items():
-            log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--")
-            log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}")
-            log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}")
-            log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}")
-            log(self.logger, dt.datetime.now(), f"passenger_waiting: {stop_obj.passenger_waiting}")
+        # for stop_id, stop_obj in self.state.stops.items():
+        #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--")
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}")
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}")
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}")
+        #     log(self.logger, dt.datetime.now(), f"passenger_waiting: {stop_obj.passenger_waiting}")

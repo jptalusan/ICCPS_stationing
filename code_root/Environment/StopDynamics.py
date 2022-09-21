@@ -40,6 +40,8 @@ class StopDynamics:
             ons = passenger_waiting[time_key]['ons']
             boarded = passenger_waiting[time_key]['boarded']
             
+            # TODO: if boarded is not equal to ons. then people leave
+            
             left_behind = passenger_waiting[time_key].get('left_behind', 0)
             passenger_waiting[time_key]['left_behind'] = 0
             passenger_waiting[time_key]['bLeft'] = True

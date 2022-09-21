@@ -69,15 +69,15 @@ class BusDynamics:
         # Activate bus if idle and has trips
         if _new_time >= full_state.buses[bus_id].t_state_change:
             time_of_activation = full_state.buses[bus_id].t_state_change
-            full_state.buses[bus_id].status = BusStatus.IN_TRANSIT
             # Move trips
             if full_state.buses[bus_id].next_block_trip:
+                full_state.buses[bus_id].status = BusStatus.IN_TRANSIT
                 current_block_trip = full_state.buses[bus_id].next_block_trip
                 full_state.buses[bus_id].current_block_trip = current_block_trip
                 bus_block_trips = full_state.buses[bus_id].bus_block_trips
                 
                 bbt_idx = bus_block_trips.index(current_block_trip)
-                if bbt_idx == (len(bus_block_trips) - 1):
+                if bbt_idx == (len(bus_block_trips) - 1) or len(bus_block_trips) == 1:
                     full_state.buses[bus_id].next_block_trip = None
                 else:
                     full_state.buses[bus_id].next_block_trip = bus_block_trips[bbt_idx + 1]
@@ -115,16 +115,17 @@ class BusDynamics:
         # log(self.logger, _new_time, f"bus time:{curr_bus_time}, bus state change:{full_state.buses[bus_id].t_state_change}")
         
         # Calculate travel time to next stop and update t_state_change
-        if _new_time >= full_state.buses[bus_id].t_state_change:          
+        if _new_time >= full_state.buses[bus_id].t_state_change:
             time_of_arrival        = full_state.buses[bus_id].t_state_change
             current_block_trip     = full_state.buses[bus_id].current_block_trip
+            bus_block_trips     = full_state.buses[bus_id].bus_block_trips
             current_stop_number    = full_state.buses[bus_id].current_stop_number
             next_stop_number       = full_state.buses[bus_id].next_stop_number
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
             current_stop_id        = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
             
             log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at stop: {current_stop_id}", LogType.INFO)
-            
+            log(self.logger, _new_time, f"bus:{bus_block_trips},{next_stop_number}")
             # Bus running time
             if full_state.buses[bus_id].time_at_last_stop:
                 full_state.buses[bus_id].total_service_time += (_new_time - full_state.buses[bus_id].time_at_last_stop).total_seconds()
@@ -225,7 +226,7 @@ class BusDynamics:
             bus_object.current_load = bus_object.current_load + ons
             bus_object.current_load = bus_object.current_load - offs
             bus_object.total_passengers_served += ons
-            log(self.logger, _new_time, f"picking up @ {stop_id}: curr:{current_load},{ons}/smp:{sampled_load},{sampled_ons}", LogType.INFO)
+            log(self.logger, _new_time, f"picking up @ {stop_id}: curr:{current_load},{ons}/smp:{sampled_load},{sampled_ons}", LogType.DEBUG)
             log(self.logger, _new_time, f"Bus {bus_id} @ {stop_id} ons:{ons}, offs:{offs}, curr_load:{bus_object.current_load}", LogType.INFO)
 
             stop_object.total_passenger_ons += ons
