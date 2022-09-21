@@ -49,7 +49,14 @@ class DoNothing:
             return new_events
         
         elif curr_event.event_type == EventType.PASSENGER_LEAVE_STOP:
-            log(self.logger, curr_event.time, "People left the stop, setup action...", LogType.DEBUG)
+            type_specific_information = curr_event.type_specific_information
+            time_key = type_specific_information['time']
+            stop_id = type_specific_information['stop_id']
+            stop_obj = state.stops[stop_id]
+            passenger_waiting = stop_obj.passenger_waiting
+            bLeft = passenger_waiting[time_key]['bLeft']
+            if bLeft:
+                log(self.logger, curr_event.time, f"People left stop {stop_id}, setup action...", LogType.DEBUG)
             new_events = []
             return new_events
         

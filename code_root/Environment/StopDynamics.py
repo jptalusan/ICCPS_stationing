@@ -41,12 +41,12 @@ class StopDynamics:
             boarded = passenger_waiting[time_key]['boarded']
             
             # TODO: if boarded is not equal to ons. then people leave
-            
-            left_behind = passenger_waiting[time_key].get('left_behind', 0)
-            passenger_waiting[time_key]['left_behind'] = 0
-            passenger_waiting[time_key]['bLeft'] = True
-            passenger_waiting[time_key]['went_home']   = ons - boarded + left_behind
-                
-            full_state.stops[curr_stop_id].passenger_waiting = passenger_waiting
-            log(self.logger, _new_time, f"Stop @ {curr_stop_id}: people left after {PASSENGER_TIME_TO_LEAVE} minutes.", LogType.ERROR)
+            if boarded != ons:
+                left_behind = passenger_waiting[time_key].get('left_behind', 0)
+                passenger_waiting[time_key]['left_behind'] = 0
+                passenger_waiting[time_key]['bLeft'] = True
+                passenger_waiting[time_key]['went_home']   = ons - boarded + left_behind
+                    
+                full_state.stops[curr_stop_id].passenger_waiting = passenger_waiting
+                log(self.logger, _new_time, f"Stop @ {curr_stop_id}: people left after {PASSENGER_TIME_TO_LEAVE} minutes.", LogType.ERROR)
             return []
