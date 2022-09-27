@@ -21,7 +21,7 @@ class EnvironmentModel:
         '''
         new_events = []
         new_time = curr_event.time
-        print(new_time, state.time)
+        # print(new_time, state.time)
         assert new_time >= state.time
         
         # if (curr_event.event_type == EventType.VEHICLE_START_TRIP) or \

@@ -14,6 +14,7 @@ class EventType(Enum):
     VEHICLE_ARRIVE_AT_STOP = 'vehicle_arrive_at_stop'
     VEHICLE_ACCIDENT = 'vehicle_accident'
     VEHICLE_BREAKDOWN = 'vehicle_break_down'
+    VEHICLE_REPAIRED = 'vehicle_repaired'
     VEHICLE_FINISH_TRIP = 'vehicle_finish_trip'
     VEHICLE_FINISH_BLOCK = 'vehicle_finish_block'
     PASSENGER_ARRIVE_STOP = 'passenger_arrive_stop'

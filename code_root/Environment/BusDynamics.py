@@ -77,10 +77,6 @@ class BusDynamics:
                 bus_block_trips = full_state.buses[bus_id].bus_block_trips
                 # Assuming idle buses are start a depot
                 current_depot = full_state.buses[bus_id].current_stop
-                # full_state.buses[bus_id].current_stop_number = 0
-
-                # if full_state.buses[bus_id].current_stop_number < 0:
-                #     full_state.buses[bus_id].current_stop_number = 0
                 
                 travel_time = self.travel_model.get_travel_time_from_depot(current_block_trip, current_depot, full_state.buses[bus_id].current_stop_number, _new_time)
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
@@ -91,6 +87,7 @@ class BusDynamics:
                 event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP, 
                               time=time_to_state_change,
                               type_specific_information={'bus_id': bus_id, 
+                                                         'current_block_trip': current_block_trip,
                                                          'stop':full_state.buses[bus_id].current_stop_number})
                 self.new_events.append(event)
                 return time_of_activation, True
@@ -166,6 +163,7 @@ class BusDynamics:
                 event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP, 
                               time=time_to_state_change,
                               type_specific_information={'bus_id': bus_id, 
+                                                         'current_block_trip': current_block_trip,
                                                          'stop':full_state.buses[bus_id].current_stop_number})
                 self.new_events.append(event)
             
@@ -202,7 +200,6 @@ class BusDynamics:
         remaining = 0
         log(self.logger, _new_time, passenger_waiting)
         if not passenger_waiting:
-            print("HEEEERREE")
             return
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
@@ -234,13 +231,12 @@ class BusDynamics:
         
         # Delete passenger_waiting
         if remaining == 0:
-            if route_id_dir in passenger_waiting:
-                passenger_waiting[route_id_dir] = {}
+            passenger_waiting[route_id_dir] = {}
         else:
             passenger_waiting[route_id_dir] = {passenger_arrival_time: {'ons':ons, 'offs':offs, 'remaining':remaining}}
             
-        log(self.logger, _new_time, f"Bus {bus_id} @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}. Load: {bus_object.current_load:.0f}", LogType.INFO)
-        
+        log(self.logger, _new_time, f"BusDynamics: Bus {bus_id} @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}. Load: {bus_object.current_load:.0f}", LogType.INFO)
+        # log(self.logger, _new_time, f"BusDynamics: Bus {bus_id} @ {current_block_trip}: {route_id_dir}, {passenger_waiting}")
         stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
         # stop_object.passenger_waiting = passenger_waiting
         stop_object.total_passenger_ons += ons

@@ -149,19 +149,19 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                     events.append(event)
                     
                     # # probability that a bus breaks down
-                    # if np.random.uniform(0, 1) > 0.900 and not has_broken:
+                    # if np.random.uniform(0, 1) > 0.70 and not has_broken:
                     #     has_broken = True
                     #     print("BROKEN!")
                     #     event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
-                    #                   time=event_datetime + dt.timedelta(minutes=np.random.randint(0, 10)),
+                    #                   time=event_datetime + dt.timedelta(minutes=np.random.randint(30, 60)),
                     #                   type_specific_information={'bus_id': bus_id})
                     #     events.append(event)
         
         events.sort(key=lambda x: x.time, reverse=False)
         # [print(event) for event in events]
         
-        # with open(saved_events, "wb") as f:
-        #     pickle.dump(events, f)
+        with open(saved_events, "wb") as f:
+            pickle.dump(events, f)
     else:
         print("loading events...")
         with open(saved_events, "rb") as f:
