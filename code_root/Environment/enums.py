@@ -8,6 +8,7 @@ class BusStatus(IntEnum):
     BROKEN = 0
     IDLE = 1
     IN_TRANSIT = 2
+    ALLOCATION = 3
     
 class EventType(Enum):
     VEHICLE_START_TRIP = 'vehicle_start_trip'

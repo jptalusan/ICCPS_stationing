@@ -1,6 +1,7 @@
 from src.utils import *
-from Environment.enums import EventType, BusStatus, LogType
+from Environment.enums import EventType, BusStatus, LogType, BusType
 from Environment.DataStructures.Event import Event
+import random
 
 # Limit dispatch to 1 overload bus per trip/route_id_dir
 # Allocate to depot and activate buses
@@ -22,6 +23,8 @@ class DispatchOnlyCoord:
         self.metrics = dict()
         self.metrics['resp_times'] = dict()
         self.metrics['computation_times'] = dict()
+        
+        self.random_seed = random.seed(100)
         pass
     
     def event_processing_callback_funct(self, state, curr_event):
@@ -47,7 +50,11 @@ class DispatchOnlyCoord:
         
         # Check if passengers are left behind.
         elif curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-            new_events = self.dispatch_overload_buses(state, curr_event)
+            new_events = []
+            _new_events = self.dispatch_overload_buses(state, curr_event)
+            new_events.extend(_new_events)
+            # _new_events = self.move_idle_overload_buses(state, curr_event)
+            # new_events.extend(_new_events)
             
             return new_events
         
@@ -96,11 +103,37 @@ class DispatchOnlyCoord:
             log(self.logger, state.time, f"Sending takeover overflow bus: {ofb_id} to {bus_obj.current_block_trip} @ stop {bus_obj.current_stop}", LogType.ERROR)
         return new_events
     
+    def move_idle_overload_buses(self, state, curr_event):
+        new_events = []
+        num_available_buses = len([_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+        if num_available_buses <= 0:
+            return []
+        
+        stop_list = list(state.stops.keys())
+        
+        for bus_id, bus_obj in state.buses.items():
+            if bus_obj.type == BusType.OVERLOAD:
+                if bus_obj.status == BusStatus.IDLE:
+                    current_stop = bus_obj.current_stop
+                    reallocation = random.choice(stop_list)
+                    
+                    travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation, curr_event.time)
+                    bus_obj.current_stop = reallocation
+                    bus_obj.t_state_change = curr_event.time + dt.timedelta(seconds=travel_time)
+                    bus_obj.status = BusStatus.ALLOCATION
+                    bus_obj.time_at_last_stop = curr_event.time
+                    
+                    event = Event(event_type=EventType.VEHICLE_START_TRIP, 
+                                  time=curr_event.time)
+                    new_events.append(event)
+                    log(self.logger, curr_event.time, f"Reallocating overflow bus: {bus_id} from {current_stop} to {reallocation}", LogType.INFO)
+        return new_events
+    
     # This is the action_taker. Taking the actions based on the decisions of the decision maker (which does not update anything).
     def dispatch_overload_buses(self, state, curr_event):
         log(self.logger, curr_event.time, f"Dispatch_overload: {curr_event}.")
         new_events = []
-        num_available_buses = len([_ for _ in state.buses.values() if _.status == BusStatus.IDLE])
+        num_available_buses = len([_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
         if num_available_buses <= 0:
             return []
         
@@ -122,8 +155,8 @@ class DispatchOnlyCoord:
         route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
         
         passenger_waiting = stop_obj.passenger_waiting
-        remaining = 0
         if passenger_waiting:
+            remaining = 0
             for _route_id_dir, _p in passenger_waiting.items():
                 log(self.logger, curr_event.time, f"Dispatch: {stop_id}, {_route_id_dir}, {route_id_dir}, {_p}")
                 if (route_id_dir == _route_id_dir) & len(_p) > 0:

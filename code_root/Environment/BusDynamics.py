@@ -36,6 +36,8 @@ class BusDynamics:
                 new_resp_time, update_status = self.idle_update(bus_id, curr_bus_time, _new_time, full_state)
             elif resp_status == BusStatus.IN_TRANSIT:
                 new_resp_time, update_status = self.transit_update(bus_id, curr_bus_time, _new_time, full_state)
+            elif resp_status == BusStatus.ALLOCATION:
+                new_resp_time, update_status = self.allocation_update(bus_id, curr_bus_time, _new_time, full_state)
                 
             curr_bus_time = new_resp_time
         
@@ -51,6 +53,8 @@ class BusDynamics:
                 new_resp_time, update_status = self.idle_update(bus_id, curr_bus_time, _new_time, full_state)
             elif resp_status == BusStatus.IN_TRANSIT:
                 new_resp_time, update_status = self.transit_update(bus_id, curr_bus_time, _new_time, full_state)
+            elif resp_status == BusStatus.ALLOCATION:
+                new_resp_time, update_status = self.allocation_update(bus_id, curr_bus_time, _new_time, full_state)
                 
             curr_bus_time = new_resp_time
             
@@ -60,7 +64,25 @@ class BusDynamics:
         full_state.buses[bus_id].status = BusStatus.BROKEN
         
         return _new_time, False
-            
+
+    def allocation_update(self, bus_id, curr_bus_time, _new_time, full_state):
+        if _new_time >= full_state.buses[bus_id].t_state_change:
+            full_state.buses[bus_id].status = BusStatus.IDLE
+            time_of_reallocation = full_state.buses[bus_id].t_state_change
+            log(self.logger, _new_time, f"Reallocated Bus {bus_id} to {full_state.buses[bus_id].current_stop}")
+            return time_of_reallocation, False
+        
+        # Interpolate
+        else:
+            if full_state.buses[bus_id].time_at_last_stop:
+                journey_fraction = (_new_time - full_state.buses[bus_id].time_at_last_stop) / (full_state.buses[bus_id].t_state_change - full_state.buses[bus_id].time_at_last_stop)
+            else:
+                journey_fraction = 0.0
+            log(self.logger, _new_time, f"Reallocating Bus {bus_id}: {journey_fraction*100:.2f}% to {full_state.buses[bus_id].current_stop_number}")
+            full_state.buses[bus_id].percent_to_next_stop = journey_fraction
+
+            return _new_time, False
+    
     def idle_update(self, bus_id, curr_bus_time, _new_time, full_state):
         # self.logger.debug("Enter idle_update()")
         '''
@@ -80,7 +102,7 @@ class BusDynamics:
                 
                 travel_time = self.travel_model.get_travel_time_from_depot(current_block_trip, current_depot, full_state.buses[bus_id].current_stop_number, _new_time)
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
-                print(f"id:{bus_id},tt:{travel_time},{time_of_activation},{time_to_state_change}")
+                # print(f"id:{bus_id},tt:{travel_time},{time_of_activation},{time_to_state_change}")
                 full_state.buses[bus_id].t_state_change = time_to_state_change
                 full_state.buses[bus_id].time_at_last_stop = time_of_activation
                 

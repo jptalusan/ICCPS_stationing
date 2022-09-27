@@ -60,7 +60,7 @@ class EmpiricalTravelModel:
         
         tdf = tdf[tdf['time'] == f'1900-01-01 {scheduled_time}']
         if not tdf.empty:
-            print(scheduled_time, current_stop_number + 1, stop_id_original, tdf.iloc[0]['sample_time_to_next_stop'])
+            # print(scheduled_time, current_stop_number + 1, stop_id_original, tdf.iloc[0]['sample_time_to_next_stop'])
             return tdf.iloc[0]['sample_time_to_next_stop']
         # TODO: Handle when not available!
         return self.get_travel_time_from_depot(current_block_trip, stop_id_original, current_stop_number, _datetime)
@@ -76,6 +76,14 @@ class EmpiricalTravelModel:
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
         log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
+        return tt
+    
+    def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
+        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+        next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+        
+        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
         return tt
     
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
