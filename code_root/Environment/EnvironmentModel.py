@@ -21,16 +21,14 @@ class EnvironmentModel:
         '''
         new_events = []
         new_time = curr_event.time
-        # print(new_time, state.time, curr_event)
+        print(new_time, state.time)
         assert new_time >= state.time
-        
         
         # if (curr_event.event_type == EventType.VEHICLE_START_TRIP) or \
         #    (curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP) or \
         #    (curr_event.event_type == EventType.VEHICLE_ACCIDENT) or \
         #    (curr_event.event_type == EventType.VEHICLE_BREAKDOWN):
         log(self.logger, new_time, curr_event, LogType.DEBUG)
-            
         
         if (curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP) or \
            (curr_event.event_type == EventType.PASSENGER_LEAVE_STOP):

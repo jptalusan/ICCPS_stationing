@@ -230,3 +230,6 @@ sample_trip_plan.pkl
 
 # End of https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks,visualstudiocode,windows
 code/Scenarios/data/sample_trip_plan.pkl
+code_root/*.csv
+*.pkl
+*.json

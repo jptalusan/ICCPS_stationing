@@ -8,8 +8,7 @@ class Bus:
                  bus_block_trips=[],
                  current_stop="",
                  current_block_trip=None,
-                 next_block_trip=None,
-                 current_stop_number=-1,
+                 current_stop_number=0,
                  next_stop_number=0,
                  t_state_change=0.0,
                  percent_to_next_stop=0.0,
@@ -26,7 +25,6 @@ class Bus:
         self.type = type
         self.bus_block_trips = bus_block_trips
         self.current_block_trip = current_block_trip
-        self.next_block_trip = next_block_trip
         self.current_stop = current_stop
         self.current_stop_number = current_stop_number
         self.next_stop_number = next_stop_number

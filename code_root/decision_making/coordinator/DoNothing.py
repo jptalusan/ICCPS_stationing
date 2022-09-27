@@ -54,9 +54,13 @@ class DoNothing:
             stop_id = type_specific_information['stop_id']
             stop_obj = state.stops[stop_id]
             passenger_waiting = stop_obj.passenger_waiting
-            bLeft = passenger_waiting[time_key]['bLeft']
-            if bLeft:
-                log(self.logger, curr_event.time, f"People left stop {stop_id}, setup action...", LogType.DEBUG)
+            for route_id_dir, route_id_dir_dict in passenger_waiting.items():
+                if len(route_id_dir_dict) == 0:
+                    continue
+                for _, v in passenger_waiting[route_id_dir].items():
+                    if len(v) == 0:
+                        continue
+                    log(self.logger, curr_event.time, f"{v['remaining']} people left stop {stop_id}, setup action...", LogType.DEBUG)
             new_events = []
             return new_events
         

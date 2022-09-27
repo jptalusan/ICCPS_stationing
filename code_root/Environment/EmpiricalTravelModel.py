@@ -3,6 +3,7 @@ from src.utils import *
 import json
 import warnings
 import pandas as pd
+import osmnx as ox
 from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
@@ -26,7 +27,12 @@ class EmpiricalTravelModel:
         self.sampled_distance = pd.read_pickle(distance_path)
         
         self.logger = logger
-        pass
+        
+        fp = '/home/jptalusan/gits/mta_simulator_redo/code_root/scenarios/baseline/data/davidson_graph.graphml'
+        self.G = ox.load_graphml(fp)
+        
+        fp = '/home/jptalusan/gits/mta_simulator_redo/code_root/scenarios/baseline/data/stops_node_matching.pkl'
+        self.stop_node_matches = pd.read_pickle(fp)
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
@@ -57,11 +63,20 @@ class EmpiricalTravelModel:
             print(scheduled_time, current_stop_number + 1, stop_id_original, tdf.iloc[0]['sample_time_to_next_stop'])
             return tdf.iloc[0]['sample_time_to_next_stop']
         # TODO: Handle when not available!
-        return self.get_travel_time_from_depot()
+        return self.get_travel_time_from_depot(current_block_trip, stop_id_original, current_stop_number, _datetime)
     
     #TODO: Add OSM computation
-    def get_travel_time_from_depot(self):
-        return 100
+    def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number, _datetime):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        next_stop_id = trip_data['stop_id_original'][current_stop_number]
+        
+        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+        next_node = self.stop_node_matches.query("stop_id_original == @next_stop_id")['nearest_node'].iloc[0]
+        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+        
+        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
+        return tt
     
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
     def get_distance(self):
@@ -100,3 +115,28 @@ class EmpiricalTravelModel:
         arrival_time_str = trip_data['scheduled_time'][current_stop_sequence]
         scheduled_arrival_time = str_timestamp_to_datetime(arrival_time_str)
         return scheduled_arrival_time
+    
+    # tt in seconds and dd in meters
+    def compute_OSM_travel_time_distance(self, current_node, next_node):
+        try:
+            r = ox.shortest_path(self.G, current_node, next_node, weight='length')
+            cols = ['osmid', 'length', 'travel_time']
+            attrs = ox.utils_graph.get_route_edge_attributes(self.G, r)
+            tt = pd.DataFrame(attrs)[cols]['travel_time'].sum()
+            dd = pd.DataFrame(attrs)[cols]['length'].sum()
+            return tt, dd
+        except:
+            return 0, 0
+    
+    def get_route_id_dir_for_trip(self, current_block_trip):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        route_id           = trip_data['route_id']
+        route_direction    = trip_data['route_direction']
+        return str(route_id) + "_" + route_direction
+        
+    def get_last_stop_number_on_trip(self, current_block_trip):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        return trip_data['last_stop_sequence']
+        
