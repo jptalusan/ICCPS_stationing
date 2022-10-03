@@ -22,6 +22,11 @@ class EventType(Enum):
     PASSENGER_LEAVE_STOP = 'passenger_leave_stop'
     CONGESTION_LEVEL_CHANGE = 'congestion_level_change'
     
+class ActionType(Enum):
+    OVERLOAD_DISPATCH = 'overload_dispatch'
+    OVERLOAD_ALLOCATE = 'overload_allocate'
+    OVERLOAD_TO_BROKEN = 'overload_to_broken'
+    
 class LogType(Enum):
     ERROR = 'error'
     INFO = 'info'

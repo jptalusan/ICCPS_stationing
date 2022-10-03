@@ -75,7 +75,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop_id")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
+        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f},{dd:.2f}', LogType.DEBUG)
         return tt
     
     def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
@@ -86,9 +86,22 @@ class EmpiricalTravelModel:
         log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
         return tt
     
+    def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
+        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+        next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+        
+        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop}:{next_node}:tt,dd:{tt},{dd}', LogType.DEBUG)
+        return dd
+    
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
-    def get_distance(self):
-        pass
+    def get_distance(self, curr_stop, next_stop, _datetime):
+        _df = self.sampled_distance.query("stop_id == @curr_stop and next_stop_id == @next_stop")
+        if len(_df) == 1:
+            shape_dist_traveled_km = _df.iloc[0]['shape_dist_traveled_km']
+        else:
+            shape_dist_traveled_km = self.get_distance_from_stop_to_stop(curr_stop, next_stop, _datetime)
+        return shape_dist_traveled_km / 1000
     
     # Can probably move to a different file next time
     def get_next_stop(self, current_block_trip, current_stop_sequence):
@@ -116,6 +129,12 @@ class EmpiricalTravelModel:
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
         return trip_data['stop_id_original'][current_stop_sequence]
+    
+    def get_stop_number_at_id(self, current_block_trip, current_stop_id):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        stop_idx = trip_data['stop_id_original'].index(current_stop_id)
+        return trip_data['stop_sequence'][stop_idx]
         
     def get_scheduled_arrival_time(self, current_block_trip, current_stop_sequence):
         current_trip = current_block_trip[1]

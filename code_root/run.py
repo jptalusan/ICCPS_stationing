@@ -7,6 +7,9 @@ from Environment.DataStructures.Event import Event
 from Environment.DataStructures.Bus import Bus
 from Environment.DataStructures.Stop import Stop
 from Environment.DataStructures.State import State
+from decision_making.coordinator.RandomCoord import RandomCoord
+from decision_making.dispatch.RandomDispatch import RandomDispatch
+from decision_making.ValidActions import ValidActions
 from decision_making.coordinator.DispatchOnlyCoord import DispatchOnlyCoord
 from decision_making.dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
 from decision_making.coordinator.DoNothing import DoNothing as Coord_DoNothing
@@ -79,10 +82,11 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
-    sampled_offs = pd.read_pickle('scenarios/baseline/data/sampled_offs.pkl')
-    sampled_ons  = pd.read_pickle('scenarios/baseline/data/sampled_ons.pkl')
-    sampled_offs['time'] = pd.to_datetime(sampled_offs['time'], format='%H:%M:%S')
-    sampled_ons['time']  = pd.to_datetime(sampled_ons['time'], format='%H:%M:%S')
+    # sampled_offs = pd.read_pickle('scenarios/baseline/data/sampled_offs.pkl')
+    # sampled_ons  = pd.read_pickle('scenarios/baseline/data/sampled_ons.pkl')
+    sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
+    # sampled_offs['time'] = pd.to_datetime(sampled_offs['time'], format='%H:%M:%S')
+    # sampled_ons['time']  = pd.to_datetime(sampled_ons['time'], format='%H:%M:%S')
     
     # Initial events
     # Includes: Trip starts, passenger sampling
@@ -92,11 +96,13 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     stop_list = []
     
     # event_file = 'events_all_vehicles.pkl'
-    event_file = 'events_2.pkl'
+    event_file = 'events_break_over.pkl'
+    # event_file = 'events_no_break.pkl'
     saved_events = f'/media/seconddrive/JP/gits/mta_simulator_redo/code_root/scenarios/baseline/data/{event_file}'
     
+    pbar = tqdm(Buses.items())
     if not os.path.exists(saved_events):
-        for bus_id, bus in tqdm(Buses.items()):
+        for bus_id, bus in pbar:
             if bus.type == BusType.OVERLOAD:
                 continue
             blocks_trips = bus.bus_block_trips
@@ -119,25 +125,23 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                 route_id_dir     = f"{route_id}_{route_direction}"
                 scheduled_time   = trip_plan[trip]['scheduled_time']
                 stop_id_original = trip_plan[trip]['stop_id_original']
-                scheduled_time = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in scheduled_time]
+                # scheduled_time = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in scheduled_time]
+                scheduled_time = [str_timestamp_to_datetime(st).strftime('%Y-%m-%d %H:%M:%S') for st in scheduled_time]
                 
                 for i in range(len(scheduled_time)):
-                    offs_df = sampled_offs.query("route_id_direction == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and IsWeekend == @is_weekend")
-                    offs_df = offs_df[offs_df['time'] == f'1900-01-01 {scheduled_time[i]}']
-                    offs = offs_df.iloc[0]['sample_offs']
+                    load = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['sampled_loads']
+                    print(f"{block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}")
                     
-                    ons_df = sampled_ons.query("route_id_direction == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and IsWeekend == @is_weekend")
-                    ons  = ons_df.iloc[0]['sample_ons']
-                    # print(f"{scheduled_time[i]}, {ons}, {load}")
-                    
+                    pbar.set_description(f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}")
                     # making sure passengers arrives before the bus
-                    event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
+                    # event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
+                    event_datetime = str_timestamp_to_datetime(f"{scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
                     
                     event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP, 
                                 time=event_datetime, 
                                 type_specific_information={'route_id_dir': route_id_dir,
                                                            'stop_id': stop_id_original[i], 
-                                                           'ons':ons, 'offs':offs})
+                                                           'load':load})
                     events.append(event)
                     
                     # people will leave after N minutes.
@@ -148,14 +152,14 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                                                            'time':event_datetime})
                     events.append(event)
                     
-                    # probability that a bus breaks down
-                    if np.random.uniform(0, 1) > 0.70 and not has_broken:
-                        has_broken = True
-                        print("BROKEN!")
-                        event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
-                                      time=event_datetime + dt.timedelta(minutes=np.random.randint(30, 60)),
-                                      type_specific_information={'bus_id': bus_id})
-                        events.append(event)
+                    # # probability that a bus breaks down
+                    # if np.random.uniform(0, 1) > 0.70 and not has_broken:
+                    #     has_broken = True
+                    #     print("BROKEN!")
+                    #     event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
+                    #                   time=event_datetime + dt.timedelta(minutes=np.random.randint(10, 20)),
+                    #                   type_specific_information={'bus_id': bus_id})
+                    #     events.append(event)
         
         events.sort(key=lambda x: x.time, reverse=False)
         # [print(event) for event in events]
@@ -202,8 +206,14 @@ if __name__ == '__main__':
     # dispatcher = Dispatch_DoNothing(travel_model)
     # coordinator = Coord_DoNothing(sim_environment, travel_model, dispatcher, logger)
     
-    dispatcher = SendNearestDispatchPolicy(travel_model)
-    coordinator = DispatchOnlyCoord(sim_environment, travel_model, dispatcher, logger)
+    # dispatcher = SendNearestDispatchPolicy(travel_model)
+    # coordinator = DispatchOnlyCoord(sim_environment, travel_model, dispatcher, logger)
+    
+    dispatcher  = RandomDispatch(travel_model)
+    coordinator = RandomCoord(sim_environment, travel_model, dispatcher, logger)
+    
+    # TODO: Move to environment model once i know it works
+    valid_actions = ValidActions(travel_model, logger)
     
     starting_date_str = '2021-08-23'
     starting_date = dt.datetime.strptime(starting_date_str, '%Y-%m-%d')
@@ -219,6 +229,7 @@ if __name__ == '__main__':
                           starting_state=starting_state,
                           environment_model=sim_environment,
                           event_processing_callback=coordinator.event_processing_callback_funct,
+                          valid_actions=valid_actions,
                           logger=logger)
 
     simulator.run_simulation()

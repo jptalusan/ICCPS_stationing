@@ -19,6 +19,7 @@ class EnvironmentModel:
         :param new_time:
         :return:
         '''
+        reward = 0
         new_events = []
         new_time = curr_event.time
         # print(new_time, state.time)
@@ -38,14 +39,15 @@ class EnvironmentModel:
                                            full_state=state)
             new_events.extend(_new_events)
 
-            # update the state of EACH bus
+        # update the state of EACH bus
         for bus_id, bus_obj in state.buses.items():
-            _new_events = self.bus_dynamics.update_bus(bus_id=bus_id,
-                                                        _new_time=new_time,
-                                                        full_state=state)
+            _new_events = self.bus_dynamics.update_bus(curr_event,
+                                                       bus_id=bus_id,
+                                                       _new_time=new_time,
+                                                       full_state=state)
             new_events.extend(_new_events)
             
         # for stop_id, stop_obj in state.stops.items():
         #     print(stop_obj)
         state.time = new_time
-        return new_events
+        return reward, new_events

@@ -1,7 +1,7 @@
 from Environment.enums import BusStatus, BusType
 import random
 
-class SendNearestDispatchPolicy:
+class RandomDispatch:
     
     def __init__(self, travel_model) -> None:
         self.travel_model = travel_model

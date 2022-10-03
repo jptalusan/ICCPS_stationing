@@ -12,14 +12,17 @@ class Bus:
                  next_stop_number=0,
                  t_state_change=0.0,
                  percent_to_next_stop=0.0,
-                 total_distance_moved=0,
+                 distance_to_next_stop=0.0,
+                 total_servicekms_moved=0,
+                 total_deadkms_moved=0,
                  total_service_time=0.0,
                  total_passengers_served=0,
                  available_time=0.0,
                  dwell_time=0.0,
                  delay_time=0.0,
                  current_load=0,
-                 time_at_last_stop=None):
+                 time_at_last_stop=None,
+                 total_stops=1):
         self.my_id = my_id
         self.status = status
         self.type = type
@@ -30,7 +33,9 @@ class Bus:
         self.next_stop_number = next_stop_number
         self.t_state_change = t_state_change
         self.percent_to_next_stop = percent_to_next_stop
-        self.total_distance_moved = total_distance_moved
+        self.distance_to_next_stop = distance_to_next_stop
+        self.total_servicekms_moved = total_servicekms_moved
+        self.total_deadkms_moved = total_deadkms_moved
         self.total_passengers_served = total_passengers_served
         self.available_time = available_time
         self.dwell_time = dwell_time
@@ -39,6 +44,7 @@ class Bus:
         self.current_load = current_load
         self.time_at_last_stop = time_at_last_stop
         self.total_service_time = total_service_time
+        self.total_stops = total_stops
         
     def __str__(self):
         return f"{self.my_id},{self.status},{self.current_block_trip}"

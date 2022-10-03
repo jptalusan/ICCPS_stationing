@@ -233,3 +233,5 @@ code/Scenarios/data/sample_trip_plan.pkl
 code_root/*.csv
 *.pkl
 *.json
+visualizer_root/nashville_HERE.geojson
+*.csv
