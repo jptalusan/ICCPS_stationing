@@ -23,16 +23,17 @@ class ValidActions:
         if num_available_buses <= 0:
             return []
         
-        
         # Passengers left behind (must identify the trips that cover these stops)
         stops_with_left_behind_passengers = []
         for stop_id, stop_obj in _state.stops.items():
             passenger_waiting = stop_obj.passenger_waiting
             if not passenger_waiting:
                 continue
+            
             for route_id_dir, route_pw in passenger_waiting.items():
                 if not route_pw:
                     continue
+                
                 for arrival_time, pw in route_pw.items():
                     remaining_passengers = pw['remaining']
                     block_trip = pw['block_trip']
@@ -43,8 +44,6 @@ class ValidActions:
                     if remaining_passengers > 0:
                         stops_with_left_behind_passengers.append((stop_id, route_id_dir, arrival_time, remaining_passengers, block_trip))
                         self.served_trips.append(block_trip)
-        
-        # Sort by arrival time and filter?
         
         # Find broken buses
         broken_buses = []
@@ -75,7 +74,7 @@ class ValidActions:
         # _valid_actions = self.get_valid_allocations(state)
         # valid_actions.extend(_valid_actions)
         
-        print("Number of valid actions:", len(valid_actions))
+        # print("Number of valid actions:", len(valid_actions))
         if len(valid_actions) > 0:
             # print(state.time)
             # print(valid_actions)

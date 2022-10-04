@@ -1,6 +1,5 @@
 
 # All dates and times should just be datetime!
-from random import sample
 from Environment.EmpiricalTravelModel import EmpiricalTravelModel
 from Environment.enums import BusStatus, BusType, EventType
 from Environment.DataStructures.Event import Event
@@ -10,21 +9,18 @@ from Environment.DataStructures.State import State
 from decision_making.coordinator.RandomCoord import RandomCoord
 from decision_making.dispatch.RandomDispatch import RandomDispatch
 from decision_making.ValidActions import ValidActions
-from decision_making.coordinator.DispatchOnlyCoord import DispatchOnlyCoord
-from decision_making.dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
-from decision_making.coordinator.DoNothing import DoNothing as Coord_DoNothing
-from decision_making.dispatch.DoNothing import DoNothing as Dispatch_DoNothing
 from Environment.Simulator import Simulator
 from Environment.EnvironmentModel import EnvironmentModel
-import argparse
 from src.utils import *
-import json
-import copy
+from tqdm import tqdm
+from random import sample
 import spdlog as spd
 import numpy as np
 import pandas as pd
+import argparse
+import json
+import copy
 import pickle
-from tqdm import tqdm
 import os
 
 # TODO: Have the ability to save and load states from file.
@@ -41,19 +37,19 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
             bus_type = BusType.OVERLOAD
             
         bus_status = BusStatus.IDLE
-        bus_capacity = bus_info['vehicle_capacity']
+        bus_capacity       = bus_info['vehicle_capacity']
         bus_starting_depot = bus_info['starting_depot']
-        bus_block_trips = np.asarray(bus_info['trips'])
+        bus_block_trips    = np.asarray(bus_info['trips'])
         
         bus_block_trips = [tuple(l) for l in bus_block_trips]
         for i, bus_block_trip in enumerate(bus_block_trips):
-            block_id = bus_block_trip[0]
-            trip_id = bus_block_trip[1]
+            block_id  = bus_block_trip[0]
+            trip_id   = bus_block_trip[1]
             trip_info = trip_plan[trip_id]
             stop_id_original = trip_info['stop_id_original']
             active_stops.extend(stop_id_original)
             if i == 0:
-                st   = trip_plan[trip_id]['scheduled_time']
+                st = trip_plan[trip_id]['scheduled_time']
                 st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
                 # Add when the bus should reach next stop as state change
                 t_state_change = str_timestamp_to_datetime(f"{starting_date_str} {st}")
@@ -82,11 +78,7 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
-    # sampled_offs = pd.read_pickle('scenarios/baseline/data/sampled_offs.pkl')
-    # sampled_ons  = pd.read_pickle('scenarios/baseline/data/sampled_ons.pkl')
     sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
-    # sampled_offs['time'] = pd.to_datetime(sampled_offs['time'], format='%H:%M:%S')
-    # sampled_ons['time']  = pd.to_datetime(sampled_ons['time'], format='%H:%M:%S')
     
     # Initial events
     # Includes: Trip starts, passenger sampling
@@ -125,7 +117,6 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                 route_id_dir     = f"{route_id}_{route_direction}"
                 scheduled_time   = trip_plan[trip]['scheduled_time']
                 stop_id_original = trip_plan[trip]['stop_id_original']
-                # scheduled_time = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in scheduled_time]
                 scheduled_time = [str_timestamp_to_datetime(st).strftime('%Y-%m-%d %H:%M:%S') for st in scheduled_time]
                 
                 for i in range(len(scheduled_time)):
@@ -134,7 +125,6 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                     
                     pbar.set_description(f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}")
                     # making sure passengers arrives before the bus
-                    # event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
                     event_datetime = str_timestamp_to_datetime(f"{scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
                     
                     event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP, 
@@ -203,11 +193,6 @@ if __name__ == '__main__':
         
     travel_model = EmpiricalTravelModel(logger)
     sim_environment = EnvironmentModel(travel_model, logger)
-    # dispatcher = Dispatch_DoNothing(travel_model)
-    # coordinator = Coord_DoNothing(sim_environment, travel_model, dispatcher, logger)
-    
-    # dispatcher = SendNearestDispatchPolicy(travel_model)
-    # coordinator = DispatchOnlyCoord(sim_environment, travel_model, dispatcher, logger)
     
     dispatcher  = RandomDispatch(travel_model)
     coordinator = RandomCoord(sim_environment, travel_model, dispatcher, logger)

@@ -69,20 +69,22 @@ class Simulator:
         self.event_queue.sort(key=lambda _: _.time, reverse=False)
         
     def print_states(self):
+        LOGTYPE = LogType.INFO
+        log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)
         for bus_id, bus_obj in self.state.buses.items():
-            log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--")
-            log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s")
-            log(self.logger, dt.datetime.now(), f"aggregate delay_time: {(bus_obj.delay_time/bus_obj.total_stops):.2f} s")
-            log(self.logger, dt.datetime.now(), f"total_service_time: {bus_obj.total_service_time:.2f}")
-            log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}")
-            log(self.logger, dt.datetime.now(), f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km")
-            log(self.logger, dt.datetime.now(), f"block_trips: {bus_obj.bus_block_trips}")
+            log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"aggregate delay_time: {(bus_obj.delay_time/bus_obj.total_stops):.2f} s", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"total_service_time: {bus_obj.total_service_time:.2f}", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
 
         # for stop_id, stop_obj in self.state.stops.items():
-        #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--")
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}")
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}")
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}")
+        #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
+        #     log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}", LOGTYPE)
             
     def save_visualization(self, event_time, granularity_s=None):
         if not self.last_visual_log:

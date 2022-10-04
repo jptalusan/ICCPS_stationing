@@ -120,16 +120,19 @@ class RandomCoord:
         
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             # print(f"Random Coord: {action}")
-            ofb_obj = state.buses[ofb_id]
-            current_stop = ofb_obj.current_stop
-            action_info = action[2]
+            ofb_obj           = state.buses[ofb_id]
+            current_stop      = ofb_obj.current_stop
+            action_info       = action[2]
             reallocation_stop = action_info
-            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
+            
+            travel_time            = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
+            distance_to_next_stop  = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop, state.time)
     
-            ofb_obj.current_stop = reallocation_stop
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=travel_time)
-            ofb_obj.status = BusStatus.ALLOCATION
-            ofb_obj.time_at_last_stop = state.time
+            ofb_obj.current_stop          = reallocation_stop
+            ofb_obj.t_state_change        = state.time + dt.timedelta(seconds=travel_time)
+            ofb_obj.status                = BusStatus.ALLOCATION
+            ofb_obj.time_at_last_stop     = state.time
+            ofb_obj.distance_to_next_stop = distance_to_next_stop
             
             event = Event(event_type=EventType.VEHICLE_START_TRIP, 
                           time=state.time)

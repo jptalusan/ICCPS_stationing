@@ -22,21 +22,23 @@ class EnvironmentModel:
         reward = 0
         new_events = []
         new_time = curr_event.time
-        # print(new_time, state.time)
-        assert new_time >= state.time
         
-        # if (curr_event.event_type == EventType.VEHICLE_START_TRIP) or \
-        #    (curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP) or \
-        #    (curr_event.event_type == EventType.VEHICLE_ACCIDENT) or \
-        #    (curr_event.event_type == EventType.VEHICLE_BREAKDOWN):
+        try:
+            assert new_time >= state.time
+        except:
+            print(curr_event)
+            print(new_time)
+            print(state.time)
+            assert new_time >= state.time
+        
         log(self.logger, new_time, curr_event, LogType.DEBUG)
         
         if (curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP) or \
            (curr_event.event_type == EventType.PASSENGER_LEAVE_STOP):
-            # update the state of A stop
+            # update the state of a SINGLE stop
             _new_events = self.stop_dynamics.update_stop(curr_event,
-                                           _new_time=new_time,
-                                           full_state=state)
+                                                         _new_time=new_time,
+                                                         full_state=state)
             new_events.extend(_new_events)
 
         # update the state of EACH bus
@@ -46,8 +48,10 @@ class EnvironmentModel:
                                                        _new_time=new_time,
                                                        full_state=state)
             new_events.extend(_new_events)
-            
-        # for stop_id, stop_obj in state.stops.items():
-        #     print(stop_obj)
+
+        reward = self.compute_reward(state)
         state.time = new_time
         return reward, new_events
+    
+    def compute_reward(self, state):
+        return 0

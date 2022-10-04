@@ -117,11 +117,13 @@ class DispatchOnlyCoord:
                     current_stop = bus_obj.current_stop
                     reallocation = random.choice(stop_list)
                     
-                    travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation, curr_event.time)
-                    bus_obj.current_stop = reallocation
+                    travel_time            = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation, curr_event.time)
+                    distance_to_next_stop  = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation, curr_event.time)
+                    bus_obj.current_stop   = reallocation
                     bus_obj.t_state_change = curr_event.time + dt.timedelta(seconds=travel_time)
                     bus_obj.status = BusStatus.ALLOCATION
                     bus_obj.time_at_last_stop = curr_event.time
+                    bus_obj.distance_to_next_stop = distance_to_next_stop
                     
                     event = Event(event_type=EventType.VEHICLE_START_TRIP, 
                                   time=curr_event.time)
