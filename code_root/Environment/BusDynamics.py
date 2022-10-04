@@ -113,12 +113,17 @@ class BusDynamics:
                 current_block_trip = full_state.buses[bus_id].bus_block_trips.pop(0)
                 full_state.buses[bus_id].current_block_trip = current_block_trip
                 bus_block_trips = full_state.buses[bus_id].bus_block_trips
+                current_stop_number = full_state.buses[bus_id].current_stop_number
                 
                 # Assuming idle buses are start a depot
                 current_depot = full_state.buses[bus_id].current_stop
                 
-                travel_time = self.travel_model.get_travel_time_from_depot(current_block_trip, current_depot, full_state.buses[bus_id].current_stop_number, _new_time)
+                scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
+                
+                travel_time = self.travel_model.get_travel_time_from_depot(current_block_trip, current_depot, current_stop_number, _new_time)
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+                # Buses should start eithe at the scheduled time, or if they are late, should start as soon as possible.
+                time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
                 full_state.buses[bus_id].t_state_change = time_to_state_change
                 full_state.buses[bus_id].time_at_last_stop = time_of_activation
                 
@@ -209,6 +214,7 @@ class BusDynamics:
                     log(self.logger, _new_time, f"dwell: {dwell_time.total_seconds()}")
                     full_state.buses[bus_id].dwell_time += dwell_time.total_seconds()
                     time_to_state_change = time_to_state_change + dwell_time
+                    # time_to_state_change = time_to_state_change
                 
                 full_state.buses[bus_id].t_state_change = time_to_state_change
                 
