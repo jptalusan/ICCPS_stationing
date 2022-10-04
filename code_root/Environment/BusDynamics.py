@@ -170,7 +170,7 @@ class BusDynamics:
             current_stop_id        = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
             last_stop_number       = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
             
-            log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at stop: {current_stop_id}", LogType.INFO)
+            # log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at stop: {current_stop_id}", LogType.INFO)
             
             # Bus running time
             if full_state.buses[bus_id].time_at_last_stop:
@@ -251,8 +251,9 @@ class BusDynamics:
         
         passenger_waiting = stop_object.passenger_waiting
         
-        route_id_dir      = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
-        last_stop_in_trip = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
+        route_id_dir           = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
+        last_stop_in_trip      = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
+        scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
         
         ons = 0
         offs = 0
@@ -315,7 +316,7 @@ class BusDynamics:
             passenger_waiting[route_id_dir] = {passenger_arrival_time: {'load':ons, 'remaining':remaining, 'block_trip': current_block_trip}}
             log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
             
-        log(self.logger, _new_time, f"Bus {bus_id} @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}. Bus Load:{bus_object.current_load:.0f}", LogType.INFO)
+        log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}, load:{bus_object.current_load:.0f}", LogType.INFO)
         # log(self.logger, _new_time, f"Bus {bus_id} @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}. Sampled/Curr Load: {sampled_load:.0f}/{bus_object.current_load:.0f}", LogType.INFO)
 
         stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
