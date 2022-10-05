@@ -26,6 +26,9 @@ class EmpiricalTravelModel:
         distance_path = 'scenarios/baseline/data/gtfs_distance_pairs_km.pkl'
         self.sampled_distance = pd.read_pickle(distance_path)
         
+        disruption_path = 'scenarios/baseline/data/disruption_probabilities.pkl'
+        self.sampled_disruption = pd.read_pickle(disruption_path)
+        
         self.logger = logger
         
         fp = 'scenarios/baseline/data/davidson_graph.graphml'
@@ -157,6 +160,12 @@ class EmpiricalTravelModel:
             return tt, dd
         except:
             return 0, 0
+        
+    def get_disruption_probability(self, stop_id):
+        tdf = self.sampled_disruption.query("stop_id_original == @stop_id")
+        if not tdf.empty:
+            return tdf.iloc[0].probability
+        return 0
     
     def get_route_id_dir_for_trip(self, current_block_trip):
         current_trip = current_block_trip[1]

@@ -14,6 +14,8 @@ class StopDynamics:
             curr_route_id_dir = additional_info['route_id_dir']
             curr_stop_id      = additional_info['stop_id']
             curr_stop_load    = additional_info['load']
+            curr_stop_ons     = additional_info['ons']
+            curr_stop_offs    = additional_info['offs']
             
             passenger_waiting = full_state.stops[curr_stop_id].passenger_waiting
             if passenger_waiting == None:
@@ -21,7 +23,7 @@ class StopDynamics:
                 
             # Initial values for the passenger dictionary
             passenger_waiting[curr_route_id_dir] = {}
-            passenger_waiting[curr_route_id_dir][_new_time] = {'load':curr_stop_load, 'remaining':0, 'block_trip': ""}
+            passenger_waiting[curr_route_id_dir][_new_time] = {'load':curr_stop_load, 'remaining':0, 'block_trip': "", 'ons':curr_stop_ons, 'offs':curr_stop_offs}
             
             full_state.stops[curr_stop_id].passenger_waiting = passenger_waiting
             

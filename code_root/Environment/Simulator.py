@@ -30,12 +30,24 @@ class Simulator:
         self.visual_log.set_level(spd.LogLevel.DEBUG)
         self.visual_log.debug(f"time,id,trip_id,last_visited_stop,value,fraction,icon,radius")
         
+        spd.FileLogger(name='stop_metrics', filename='stop_metrics.csv', truncate=True)
+        self.stop_metrics_log = spd.get('stop_metrics')
+        self.stop_metrics_log.set_pattern("%v")
+        self.stop_metrics_log.set_level(spd.LogLevel.DEBUG)
+        self.stop_metrics_log.debug(f"state_time,stop_id,ons,offs,remaining")
+        
+        spd.FileLogger(name='bus_metrics', filename='bus_metrics.csv', truncate=True)
+        self.bus_metrics_log = spd.get('bus_metrics')
+        self.bus_metrics_log.set_pattern("%v")
+        self.bus_metrics_log.set_level(spd.LogLevel.DEBUG)
+        self.bus_metrics_log.debug(f"state_time,bus_id,status,type,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served")
+        
         self.last_visual_log = None
         self.valid_actions = valid_actions
         
     # Other actors catch up to the event..?
     def run_simulation(self):
-        log(self.logger, dt.datetime.now(), "Running simulation (real world time)")
+        log(self.logger, dt.datetime.now(), "Running simulation (real world time)", LogType.INFO)
         
         self.start_sim_time = time.time()
         
@@ -59,10 +71,12 @@ class Simulator:
             for event in new_events:
                 self.add_event(event)
 
-            self.save_visualization(update_event.time, granularity_s=None)
+            # self.save_visualization(update_event.time, granularity_s=None)
+            
+            # self.log_metrics()
             
         self.print_states()
-        log(self.logger, dt.datetime.now(), "Finished simulation (real world time)")
+        log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
         
     def update_sim_info(self):
         self.num_events_processed += 1
@@ -70,6 +84,40 @@ class Simulator:
     def add_event(self, new_event):
         self.event_queue.append(new_event)
         self.event_queue.sort(key=lambda _: _.time, reverse=False)
+        
+    def log_metrics(self):
+        time = self.state.time
+        for stop_id, stop_obj in self.state.stops.items():
+            passenger_waiting = stop_obj.passenger_waiting
+            ons = 0
+            offs = 0
+            remaining = 0
+            if passenger_waiting:
+                for route_id_dir in passenger_waiting:
+                    for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
+                        remaining += sampled_data['remaining']
+                        ons       += sampled_data['ons']
+                        offs      += sampled_data['offs']
+                
+            self.stop_metrics_log.debug(f"{time},{stop_id},{ons},{offs},{remaining}")
+            
+        for bus_id, bus_obj in self.state.buses.items():
+            status = bus_obj.status
+            bus_type = bus_obj.type
+            current_load = bus_obj.current_load
+            if bus_obj.current_block_trip:
+                current_block = bus_obj.current_block_trip[0]
+                current_trip = bus_obj.current_block_trip[1]
+            else:
+                current_block = None
+                current_trip = None
+                
+            current_stop = bus_obj.current_stop
+            time_at_last_stop = bus_obj.time_at_last_stop
+            total_passengers_served = bus_obj.total_passengers_served
+            
+            self.bus_metrics_log.debug(f"{time},{bus_id},{status},{bus_type},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served}")
+
         
     def print_states(self):
         LOGTYPE = LogType.INFO

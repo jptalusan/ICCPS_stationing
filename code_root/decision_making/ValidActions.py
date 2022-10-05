@@ -62,6 +62,7 @@ class ValidActions:
         # Create matrix of overload buses, original bus id, block/trips, stop_id
         valid_actions = []
         
+        # Dispatch
         _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
         _valid_actions = list(itertools.product(*_valid_actions))
         valid_actions.extend(_valid_actions)
@@ -70,8 +71,9 @@ class ValidActions:
         _valid_actions = list(itertools.product(*_valid_actions))
         valid_actions.extend(_valid_actions)
         
-        _valid_actions = self.get_valid_allocations(state)
-        valid_actions.extend(_valid_actions)
+        # Allocation
+        # _valid_actions = self.get_valid_allocations(state)
+        # valid_actions.extend(_valid_actions)
         
         # No action
         valid_actions.append(None)

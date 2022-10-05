@@ -78,7 +78,8 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
-    sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
+    # sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
+    sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_ons_offs.pkl')
     
     # Initial events
     # Includes: Trip starts, passenger sampling
@@ -88,12 +89,12 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     stop_list = []
     
     # event_file = 'events_all_vehicles.pkl'
-    event_file = 'events_break_over.pkl'
-    # event_file = 'events_no_break.pkl'
+    event_file = 'events_1.pkl'
     saved_events = f'/media/seconddrive/JP/gits/mta_simulator_redo/code_root/scenarios/baseline/data/{event_file}'
     
     pbar = tqdm(Buses.items())
     if not os.path.exists(saved_events):
+    # if True:
         for bus_id, bus in pbar:
             if bus.type == BusType.OVERLOAD:
                 continue
@@ -121,9 +122,12 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                 
                 for i in range(len(scheduled_time)):
                     load = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['sampled_loads']
-                    print(f"{block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}")
+                    ons = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['ons']
+                    offs = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['offs']
                     
-                    pbar.set_description(f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}")
+                    print(f"{block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
+                    
+                    pbar.set_description(f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
                     # making sure passengers arrives before the bus
                     event_datetime = str_timestamp_to_datetime(f"{scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
                     
@@ -131,7 +135,7 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                                 time=event_datetime, 
                                 type_specific_information={'route_id_dir': route_id_dir,
                                                            'stop_id': stop_id_original[i], 
-                                                           'load':load})
+                                                           'load':load, 'ons':ons, 'offs':offs})
                     events.append(event)
                     
                     # people will leave after N minutes.
