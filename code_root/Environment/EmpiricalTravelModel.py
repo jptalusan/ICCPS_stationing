@@ -60,9 +60,10 @@ class EmpiricalTravelModel:
         
         tdf = tdf[tdf['time'] == f'1900-01-01 {scheduled_time}']
         if not tdf.empty:
-            # print(scheduled_time, current_stop_number + 1, stop_id_original, tdf.iloc[0]['sampled_travel_time'])
             return tdf.iloc[0]['sampled_travel_time']
+        
         # TODO: Handle when not available!
+        log(self.logger, _datetime, f'Failed to get travel time for: {scheduled_time},{route_id_dir},{block_abbr},{current_stop_number+1},{stop_id_original},{IsWeekend}', LogType.ERROR)
         return self.get_travel_time_from_depot(current_block_trip, stop_id_original, current_stop_number, _datetime)
     
     #TODO: Add OSM computation
@@ -75,7 +76,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop_id")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f},{dd/1000:.2f}', LogType.DEBUG)
+        log(self.logger, _datetime, f'TT depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f}', LogType.DEBUG)
         return tt
     
     # tt is in seconds
@@ -84,7 +85,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop}:{next_node}:tt,dd:{tt:.2f},{dd/1000:.2f}', LogType.DEBUG)
+        log(self.logger, _datetime, f'TT stop {current_stop}:{current_node} to stop {next_stop}:{next_node}:tt:{tt:.2f}', LogType.DEBUG)
         return tt
     
     # dd is in meters
@@ -93,7 +94,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'From depot {current_stop}:{current_node} to {next_stop}:{next_node}:tt,dd:{tt:.2f},{dd/1000:.2f}', LogType.DEBUG)
+        log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
         return dd / 1000
     
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km

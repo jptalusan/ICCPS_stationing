@@ -209,12 +209,12 @@ class BusDynamics:
                     full_state.buses[bus_id].delay_time += delay_time.total_seconds()
                     
                 # TODO: Not the best place to put this, Dwell time
+                # TODO: Issue with dwell time, i think travel time is 0, must check
                 elif scheduled_arrival_time > time_to_state_change:
                     dwell_time = scheduled_arrival_time - time_to_state_change
                     log(self.logger, _new_time, f"dwell: {dwell_time.total_seconds()}")
                     full_state.buses[bus_id].dwell_time += dwell_time.total_seconds()
                     time_to_state_change = time_to_state_change + dwell_time
-                    # time_to_state_change = time_to_state_change
                 
                 full_state.buses[bus_id].t_state_change = time_to_state_change
                 
