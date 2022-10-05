@@ -45,11 +45,14 @@ class Simulator:
 
             valid_actions = self.valid_actions.get_valid_actions(self.state)
             
-            new_events = self.event_processing_callback(valid_actions, self.state)
+            chosen_action = self.event_processing_callback(valid_actions, self.state)
             
-            for event in new_events:
-                self.add_event(event)
+            if chosen_action:
+                new_events = self.environment_model.take_action(self.state, chosen_action)
             
+                for event in new_events:
+                    self.add_event(event)
+                
             update_event = self.event_queue.pop(0)
             reward, new_events = self.environment_model.update(self.state, update_event)
             

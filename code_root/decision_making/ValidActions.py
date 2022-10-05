@@ -66,13 +66,15 @@ class ValidActions:
         _valid_actions = list(itertools.product(*_valid_actions))
         valid_actions.extend(_valid_actions)
         
-        # print(broken_buses)
         _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
         _valid_actions = list(itertools.product(*_valid_actions))
         valid_actions.extend(_valid_actions)
         
-        # _valid_actions = self.get_valid_allocations(state)
-        # valid_actions.extend(_valid_actions)
+        _valid_actions = self.get_valid_allocations(state)
+        valid_actions.extend(_valid_actions)
+        
+        # No action
+        valid_actions.append(None)
         
         # print("Number of valid actions:", len(valid_actions))
         if len(valid_actions) > 0:
