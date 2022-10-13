@@ -3,8 +3,8 @@ class State:
     def __init__(self,
                  stops,
                  buses,
-                 events,
                  time,
+                 events=[],
                  active_incidents=[]):
         
         self.stops = stops

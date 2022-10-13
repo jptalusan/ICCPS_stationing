@@ -1,3 +1,4 @@
+import copy
 import time
 from Environment.enums import BusStatus, BusType
 from src.utils import *
@@ -58,18 +59,26 @@ class Simulator:
             valid_actions = self.valid_actions.get_valid_actions(self.state)
             
             chosen_action = self.event_processing_callback(valid_actions, self.state)
-            
+            print(f"Action from MCTS: {self.state.time} @ {chosen_action}")
+
+            log(self.logger, self.state.time, f"Chosen action by MCTS:{chosen_action}", LogType.INFO)
+
             if chosen_action:
-                new_events = self.environment_model.take_action(self.state, chosen_action)
+                reward, new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             
                 for event in new_events:
                     self.add_event(event)
                 
             update_event = self.event_queue.pop(0)
-            reward, new_events = self.environment_model.update(self.state, update_event)
+            new_events = self.environment_model.update(self.state, update_event)
             
             for event in new_events:
                 self.add_event(event)
+
+            # TODO: Figure out if this is needed
+            # Adding event to state
+            # print(f"Event queue len: {len(self.event_queue)}")
+            self.state.events = copy.copy(self.event_queue)
 
             # self.save_visualization(update_event.time, granularity_s=None)
             
@@ -130,6 +139,26 @@ class Simulator:
             log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
+
+        for stop_id, stop_obj in self.state.stops.items():
+            passenger_waiting = stop_obj.passenger_waiting
+            if not passenger_waiting:
+                continue
+
+            for route_id_dir, route_pw in passenger_waiting.items():
+                if not route_pw:
+                    continue
+
+                for arrival_time, pw in route_pw.items():
+                    remaining_passengers = pw['remaining']
+                    block_trip = pw['block_trip']
+
+                    if block_trip in self.trips_already_covered:
+                        continue
+
+                    if remaining_passengers > 0:
+                        log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
+                        log(self.logger, dt.datetime.now(), f"Remaining: {remaining_passengers}", LOGTYPE)
 
         # for stop_id, stop_obj in self.state.stops.items():
         #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)

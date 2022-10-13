@@ -79,7 +79,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop_id")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'TT depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f}', LogType.DEBUG)
+        # log(self.logger, _datetime, f'TT depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f}', LogType.DEBUG)
         return tt
     
     # tt is in seconds
@@ -88,7 +88,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'TT stop {current_stop}:{current_node} to stop {next_stop}:{next_node}:tt:{tt:.2f}', LogType.DEBUG)
+        # log(self.logger, _datetime, f'TT stop {current_stop}:{current_node} to stop {next_stop}:{next_node}:tt:{tt:.2f}', LogType.DEBUG)
         return tt
     
     # dd is in meters
@@ -97,7 +97,7 @@ class EmpiricalTravelModel:
         next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
         tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
         
-        log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
+        # log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
         return dd / 1000
     
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km

@@ -39,7 +39,11 @@ class StopDynamics:
             
             # left_behind = additional_info['left_behind']
             passenger_waiting = full_state.stops[curr_stop_id].passenger_waiting
-            
+
+            # HACK: Not sure if this is correct
+            if passenger_waiting is None:
+                return []
+
             if time_key in passenger_waiting[curr_route_id_dir]:
                 remaining = passenger_waiting[curr_route_id_dir][time_key]['remaining']
                 

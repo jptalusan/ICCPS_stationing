@@ -7,7 +7,9 @@ from Environment.DataStructures.Bus import Bus
 from Environment.DataStructures.Stop import Stop
 from Environment.DataStructures.State import State
 from decision_making.coordinator.RandomCoord import RandomCoord
+from decision_making.dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
 from decision_making.dispatch.RandomDispatch import RandomDispatch
+from decision_making.dispatch.DoNothing import DoNothing
 from decision_making.ValidActions import ValidActions
 from Environment.Simulator import Simulator
 from Environment.EnvironmentModel import EnvironmentModel
@@ -198,7 +200,9 @@ if __name__ == '__main__':
     travel_model = EmpiricalTravelModel(logger)
     sim_environment = EnvironmentModel(travel_model, logger)
     
-    dispatcher  = RandomDispatch(travel_model)
+    # dispatcher  = RandomDispatch(travel_model)
+    # dispatcher  = DoNothing(travel_model)
+    dispatcher  = SendNearestDispatchPolicy(travel_model)
     coordinator = RandomCoord(sim_environment, travel_model, dispatcher, logger)
     
     # TODO: Move to environment model once i know it works

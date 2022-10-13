@@ -1,4 +1,5 @@
 # Current_stop is the starting depot if the current_stop_number is 0
+# TODO: Add time to next stop (for sampling purposes)
 class Bus:
     def __init__(self,
                  my_id,

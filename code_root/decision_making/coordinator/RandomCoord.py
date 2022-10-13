@@ -33,8 +33,10 @@ class RandomCoord:
         if len(actions) == 0:
             return None
         
-        random_action = random.choice(actions)
-        return random_action
+        # random_action = random.choice(actions)
+        action = self.dispatch_policy.select_overload_to_dispatch(state, actions)
+
+        return action
     
     def add_incident(self, state, incident_event):
         incident = incident_event.type_specific_information['incident_obj']
