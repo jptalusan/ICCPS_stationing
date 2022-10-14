@@ -1,9 +1,11 @@
 from Environment.BusDynamics import BusDynamics
 from Environment.StopDynamics import StopDynamics
-from Environment.enums import BusStatus, EventType, ActionType
+from Environment.enums import BusStatus, EventType, ActionType, LogType
 from Environment.DataStructures.Event import Event
 from src.utils import *
 import datetime as dt
+import copy
+
 
 class EnvironmentModel:
 
@@ -17,25 +19,26 @@ class EnvironmentModel:
         self.served_buses = []
 
     def update(self, state, curr_event):
-        '''
+        """
         Updates the state to the given time. This is mostly updating the responders
         :param state:
-        :param new_time:
+        :param curr_event:
         :return:
-        '''
+        """
         reward = 0
         new_events = []
         new_time = curr_event.time
 
         try:
             assert new_time >= state.time
-        except:
+        except AssertionError:
             print(curr_event)
             print(new_time)
             print(state.time)
             assert new_time >= state.time
 
-        log(self.logger, new_time, curr_event, LogType.DEBUG)
+        print(curr_event)
+        log(self.logger, state.time, f"Event: {curr_event}", LogType.INFO)
 
         if (curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP) or \
            (curr_event.event_type == EventType.PASSENGER_LEAVE_STOP):
@@ -111,7 +114,8 @@ class EnvironmentModel:
             ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
 
             new_events.append(event)
 
@@ -130,21 +134,27 @@ class EnvironmentModel:
             broken_bus_obj = state.buses[broken_bus_id]
 
             current_block_trip = broken_bus_obj.current_block_trip
-            stop_no            = broken_bus_obj.current_stop_number
+            stop_no = broken_bus_obj.current_stop_number
 
-            ofb_obj.bus_block_trips = [broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips
+            ofb_obj.bus_block_trips = copy.copy([broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips)
             ofb_obj.current_block_trip = None
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no - 1
             ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             # Switch passengers
-            ofb_obj.current_load = broken_bus_obj.current_load
+            ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
             ofb_obj.total_passengers_served = ofb_obj.current_load
+
+            # Deactivate broken_bus_obj
+            # broken_bus_obj.total_passengers_served = broken_bus_obj.total_passengers_served - broken_bus_obj.current_load
             broken_bus_obj.current_load = 0
+            broken_bus_obj.current_block_trip = None
+            broken_bus_obj.bus_block_trips = []
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
@@ -152,22 +162,23 @@ class EnvironmentModel:
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             # print(f"Random Coord: {action}")
-            ofb_obj           = state.buses[ofb_id]
-            current_stop      = ofb_obj.current_stop
-            action_info       = action["info"]
+            ofb_obj = state.buses[ofb_id]
+            current_stop = ofb_obj.current_stop
+            action_info = action["info"]
             reallocation_stop = action_info
 
-            travel_time            = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
+            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
             distance_to_next_stop  = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop, state.time)
 
-            ofb_obj.current_stop          = reallocation_stop
-            ofb_obj.t_state_change        = state.time + dt.timedelta(seconds=travel_time)
-            ofb_obj.status                = BusStatus.ALLOCATION
-            ofb_obj.time_at_last_stop     = state.time
+            ofb_obj.current_stop = reallocation_stop
+            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=travel_time)
+            ofb_obj.status  = BusStatus.ALLOCATION
+            ofb_obj.time_at_last_stop = state.time
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
             new_events.append(event)
             # new_events = self.dispatch_policy.
             log(self.logger, state.time, f"Reallocating overflow bus: {ofb_id} from {current_stop} to {reallocation_stop}", LogType.INFO)

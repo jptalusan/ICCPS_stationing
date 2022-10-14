@@ -1,4 +1,3 @@
-
 # All dates and times should just be datetime!
 from Environment.EmpiricalTravelModel import EmpiricalTravelModel
 from Environment.enums import BusStatus, BusType, EventType
@@ -14,8 +13,8 @@ from decision_making.ValidActions import ValidActions
 from Environment.Simulator import Simulator
 from Environment.EnvironmentModel import EnvironmentModel
 from src.utils import *
+
 from tqdm import tqdm
-from random import sample
 import spdlog as spd
 import numpy as np
 import pandas as pd
@@ -24,6 +23,7 @@ import json
 import copy
 import pickle
 import os
+
 
 # TODO: Have the ability to save and load states from file.
 def load_initial_state(bus_plan, trip_plan, random_seed=100):
@@ -73,7 +73,8 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
 
     print(f"Added {len(Buses)} buses and {len(Stops)} stops.")
     return Buses, Stops
-    
+
+
 def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     print("Adding events...")
     np.random.seed(random_seed)
@@ -92,7 +93,7 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     
     # event_file = 'events_all_vehicles.pkl'
     event_file = 'events_1.pkl'
-    saved_events = f'/media/seconddrive/JP/gits/mta_simulator_redo/code_root/scenarios/baseline/data/{event_file}'
+    saved_events = f'scenarios/baseline/data/{event_file}'
     
     pbar = tqdm(Buses.items())
     if not os.path.exists(saved_events):
@@ -169,8 +170,28 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
             
     return events
 
+
+def manually_insert_disruption(events, buses, bus_id, time):
+    if bus_id not in list(buses.keys()):
+        raise "Bus does not exist."
+
+    start_time = events[0].time
+    end_time = events[-1].time
+
+    if time < start_time or time > end_time:
+        raise "Time beyond limits."
+
+    event = Event(event_type=EventType.VEHICLE_BREAKDOWN,
+                  time=time,
+                  type_specific_information={'bus_id': bus_id})
+    events.append(event)
+    events.sort(key=lambda x: x.time, reverse=False)
+    return events
+
+
 if __name__ == '__main__':
-    spd.FileLogger(name='test', filename='spdlog_example.log', truncate=True)
+    datetime_str = dt.datetime.strftime(dt.date.today(), DATETIME_FORMAT)
+    spd.FileLogger(name='test', filename=f'logs/BASE_{datetime_str}.log', truncate=True)
     logger = spd.get('test')
     logger.set_pattern("[%l] %v")
 
@@ -215,10 +236,16 @@ if __name__ == '__main__':
     
     Buses, Stops = load_initial_state(bus_plan, trip_plan)
     
-    incident_events = load_events(starting_date_str, Buses, Stops, trip_plan)
-    
-    starting_state = copy.deepcopy(State(Stops, Buses, events=None, time=starting_datetime))
-    simulator = Simulator(starting_event_queue=copy.deepcopy(incident_events),
+    passenger_events = load_events(starting_date_str, Buses, Stops, trip_plan)
+
+    # HACK:
+    passenger_events = manually_insert_disruption(passenger_events,
+                                                  buses=Buses,
+                                                  bus_id='129',
+                                                  time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
+
+    starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=starting_datetime))
+    simulator = Simulator(starting_event_queue=copy.deepcopy(passenger_events),
                           starting_state=starting_state,
                           environment_model=sim_environment,
                           event_processing_callback=coordinator.event_processing_callback_funct,

@@ -1,7 +1,6 @@
 import copy
 import itertools
 from src.utils import *
-
 from Environment.enums import BusStatus, BusType, ActionType
 
 '''
@@ -54,13 +53,17 @@ class ValidActions:
         for bus_id, bus_obj in _state.buses.items():
             if bus_obj.status == BusStatus.BROKEN:
                 # log(self.logger, _state.time, f"Found broken bus: {bus_id}.")
-                broken_buses.append(bus_id)
+
+                # Without checking if a broken bus has already been covered, we try to cover it again
+                # Leading to null values
+                if bus_obj.current_block_trip is not None:
+                    broken_buses.append(bus_id)
             pass
 
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in _state.buses.items():
-            if bus_obj.type == BusType.OVERLOAD:
+            if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
                 idle_overload_buses.append(bus_id)
 
         # Create matrix of overload buses, original bus id, block/trips, stop_id

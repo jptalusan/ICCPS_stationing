@@ -2,6 +2,7 @@ import copy
 from src.utils import *
 from Environment.enums import LogType, EventType
 
+
 class StopDynamics:
     
     def __init__(self, travel_model, logger) -> None:

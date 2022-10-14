@@ -1,10 +1,11 @@
-import copy
-import datetime as dt
-from Environment.enums import BusStatus, BusType, EventType
+from Environment.enums import BusStatus, EventType, LogType, BusType
 from Environment.DataStructures.Event import Event
 from src.utils import *
+import datetime as dt
+import copy
 import math
 import random
+
 
 class BusDynamics:
     
@@ -12,18 +13,18 @@ class BusDynamics:
         self.travel_model = travel_model
         self.logger = logger
         self.new_events = []
-        self.random_seed = random.seed(100)
+        random.seed(100)
     
     def update_bus(self, curr_event, bus_id, _new_time, full_state):
-        '''
+        """
         In this function, a responder's state will be updated to the given time. The responder can pass through
         multiple status changes during this update
-        :param resp_obj:
-        :param resp_id:
+        :param curr_event:
+        :param bus_id:
         :param _new_time: current event's time
         :param full_state:
         :return:
-        '''
+        """
         self.new_events = []
         curr_bus_time = copy.copy(full_state.time)
         
@@ -63,17 +64,17 @@ class BusDynamics:
         return self.new_events
     
     def broken_update(self, bus_id, curr_event, curr_bus_time, _new_time, full_state):
-        '''
+        """
         There is nothing to update since the bus is broken.
-        '''
+        """
         full_state.buses[bus_id].status = BusStatus.BROKEN
         return _new_time, False
 
     def allocation_update(self, bus_id, curr_event, curr_bus_time, _new_time, full_state):
-        '''
+        """
         In this case, there is nothing to update for the bus' state, since it is waiting (between trips, before trips).
         Activate bus if idle and has trips
-        '''
+        """
         if _new_time >= full_state.buses[bus_id].t_state_change:
             full_state.buses[bus_id].status = BusStatus.IDLE
             time_of_reallocation = full_state.buses[bus_id].t_state_change
@@ -100,10 +101,10 @@ class BusDynamics:
     
     # TODO: Right now, when an bus moves from depot to stop (given it started a trip, these are not counted as deadmiles.)
     def idle_update(self, bus_id, curr_event, curr_bus_time, _new_time, full_state):
-        '''
+        """
         In this case, there is nothing to update for the bus' state, since it is waiting (between trips, before trips).
         If bus is IDLE and event is START_TRIP, activate the bus and assign block_trip to current block trips and measure distance to next stop
-        '''
+        """
         if _new_time >= full_state.buses[bus_id].t_state_change:
             # if curr_event.event_type != EventType.VEHICLE_START_TRIP:
             #     return _new_time, False
@@ -124,7 +125,7 @@ class BusDynamics:
                 
                 travel_time = self.travel_model.get_travel_time_from_depot(current_block_trip, current_depot, current_stop_number, _new_time)
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
-                # Buses should start eithe at the scheduled time, or if they are late, should start as soon as possible.
+                # Buses should start either at the scheduled time, or if they are late, should start as soon as possible.
                 time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
                 full_state.buses[bus_id].t_state_change = time_to_state_change
                 full_state.buses[bus_id].time_at_last_stop = time_of_activation
@@ -132,12 +133,15 @@ class BusDynamics:
                 # For distance
                 next_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, full_state.buses[bus_id].current_stop_number)
                 full_state.buses[bus_id].distance_to_next_stop = self.travel_model.get_distance(current_depot, next_stop_id, _new_time)
-                
+
+                if BusType.OVERLOAD == full_state.buses[bus_id].type:
+                    full_state.buses[bus_id].total_deadkms_moved += full_state.buses[bus_id].distance_to_next_stop
+
                 event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP, 
                               time=time_to_state_change,
                               type_specific_information={'bus_id': bus_id, 
                                                          'current_block_trip': current_block_trip,
-                                                         'stop':full_state.buses[bus_id].current_stop_number})
+                                                         'stop': full_state.buses[bus_id].current_stop_number})
                 self.new_events.append(event)
                 return time_of_activation, True
             # no more trips left
@@ -152,30 +156,30 @@ class BusDynamics:
     
     # If curr_event == BROKEN and it bus was in TRANSIT, set it to BROKEN.
     def transit_update(self, bus_id, curr_event, curr_bus_time, _new_time, full_state):
-        '''
+        """
         In this case, if a bus is in TRANSIT and is not BROKEN, perform stop pickups if it reaches t_state_change
         If not, it notes the fraction of the journey done.
-        '''
+        """
         
         if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
             type_specific_information = curr_event.type_specific_information
             event_bus_id = type_specific_information['bus_id']
             current_block_trip = full_state.buses[event_bus_id].current_block_trip
             if event_bus_id == bus_id:
-                log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for broke down.", LogType.ERROR)
+                log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} broke down.", LogType.ERROR)
                 full_state.buses[bus_id].status = BusStatus.BROKEN
                 full_state.buses[bus_id].t_state_change = curr_bus_time
                 return curr_bus_time, False
         
         # Calculate travel time to next stop and update t_state_change
         if _new_time >= full_state.buses[bus_id].t_state_change:
-            time_of_arrival        = full_state.buses[bus_id].t_state_change
-            current_block_trip     = full_state.buses[bus_id].current_block_trip
-            bus_block_trips        = full_state.buses[bus_id].bus_block_trips
-            current_stop_number    = full_state.buses[bus_id].current_stop_number
+            time_of_arrival = full_state.buses[bus_id].t_state_change
+            current_block_trip = full_state.buses[bus_id].current_block_trip
+            bus_block_trips = full_state.buses[bus_id].bus_block_trips
+            current_stop_number = full_state.buses[bus_id].current_stop_number
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
-            current_stop_id        = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
-            last_stop_number       = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
+            current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
+            last_stop_number = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
             
             # log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at stop: {current_stop_id}", LogType.INFO)
             
@@ -184,8 +188,8 @@ class BusDynamics:
                 full_state.buses[bus_id].total_service_time += (_new_time - full_state.buses[bus_id].time_at_last_stop).total_seconds()
                 
             full_state.buses[bus_id].time_at_last_stop = time_of_arrival
-            full_state.buses[bus_id].current_stop      = current_stop_id
-            
+            full_state.buses[bus_id].current_stop = current_stop_id
+
             # If valid stop
             if current_stop_number >= 0:
                 res = self.pickup_passengers(_new_time, bus_id, current_stop_id, full_state)
@@ -198,17 +202,19 @@ class BusDynamics:
 
             # Going to next stop
             else:
+                # A bus may break upon arrival at the stop
                 disruption_probability = self.travel_model.get_disruption_probability(current_stop_id)
                 if random.choices([False, True], weights=[1.0-disruption_probability, disruption_probability])[0]:
-                    log(self.logger, _new_time, f"Bus {bus_id} broke down at stop {current_stop_id}", LogType.ERROR)
-                    event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
-                                    time=time_of_arrival,
-                                    type_specific_information={'bus_id': bus_id})
-                    self.new_events.append(event)
+                    pass
+                #     log(self.logger, _new_time, f"Bus {bus_id} broke down at stop {current_stop_id}", LogType.ERROR)
+                #     event = Event(event_type=EventType.VEHICLE_BREAKDOWN,
+                #                     time=time_of_arrival,
+                #                     type_specific_information={'bus_id': bus_id})
+                #     self.new_events.append(event)
                     
                 else:
                     full_state.buses[bus_id].current_stop_number = current_stop_number + 1
-                    travel_time            = self.travel_model.get_travel_time(current_block_trip, current_stop_number, _new_time)
+                    travel_time = self.travel_model.get_travel_time(current_block_trip, current_stop_number, _new_time)
                     scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, full_state.buses[bus_id].current_stop_number)
                     
                     time_to_state_change = time_of_arrival + dt.timedelta(seconds=travel_time)
@@ -225,7 +231,6 @@ class BusDynamics:
                         log(self.logger, _new_time, f"dwell: {dwell_time.total_seconds()}")
                         full_state.buses[bus_id].dwell_time += dwell_time.total_seconds()
                         time_to_state_change = time_to_state_change + dwell_time
-                    
                 
                     full_state.buses[bus_id].t_state_change = time_to_state_change
                     
@@ -238,7 +243,7 @@ class BusDynamics:
                                 time=time_to_state_change,
                                 type_specific_information={'bus_id': bus_id, 
                                                             'current_block_trip': current_block_trip,
-                                                            'stop':full_state.buses[bus_id].current_stop_number})
+                                                            'stop': full_state.buses[bus_id].current_stop_number})
                     self.new_events.append(event)
             
             return time_of_arrival, False
@@ -258,18 +263,19 @@ class BusDynamics:
             return _new_time, False
 
     def pickup_passengers(self, _new_time, bus_id, stop_id, full_state):
-        bus_object  = full_state.buses[bus_id]
+        bus_object = full_state.buses[bus_id]
         stop_object = full_state.stops[stop_id]
         
-        vehicle_capacity    = bus_object.capacity
-        current_block_trip  = bus_object.current_block_trip
+        vehicle_capacity = bus_object.capacity
+        current_block_trip = bus_object.current_block_trip
         current_stop_number = bus_object.current_stop_number
-        current_load        = bus_object.current_load
+        current_load  = bus_object.current_load
         
         passenger_waiting = stop_object.passenger_waiting
+        passenger_arrival_time = _new_time
         
-        route_id_dir           = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
-        last_stop_in_trip      = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
+        route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
+        last_stop_in_trip = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
         
         ons = 0
@@ -285,16 +291,13 @@ class BusDynamics:
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
                 assert passenger_arrival_time <= _new_time
-                remaining    = sampled_data['remaining']
+                remaining = sampled_data['remaining']
                 sampled_load = sampled_data['load']
-                sampled_ons  = sampled_data['ons']
+                sampled_ons = sampled_data['ons']
                 sampled_offs = sampled_data['offs']
-                
-                # log(self.logger, _new_time, f"BusDynamics1: Bus {bus_id} @ {stop_id}: Sampled/Curr Load: {sampled_load:.0f}/{bus_object.current_load:.0f}", LogType.INFO)
 
                 if remaining > 0:
-                    sampled_ons  = remaining
-                    pass
+                    sampled_ons = remaining
                 
                 ons  += sampled_ons
                 # Might have issues here
@@ -305,32 +308,6 @@ class BusDynamics:
                 offs += sampled_offs
                 
                 picked_up_list.append(passenger_arrival_time)
-                
-                # # Special case for overload buses
-                # if remaining > 0:
-                #     sampled_ons  = remaining
-                #     # Where will i get the value for this?
-                #     sampled_offs = 0
-                #     if current_load > sampled_load:
-                #         percent_offs = (current_load - sampled_load) / current_load
-                #         sampled_offs = math.floor(percent_offs * current_load)
-
-                # else:
-                #     # Compute ons based on loads
-                #     if current_load > sampled_load:
-                #         percent_offs = (current_load - sampled_load) / current_load
-                #         sampled_offs = math.floor(percent_offs * current_load)
-                #         sampled_ons  = 0
-                #     elif current_load < sampled_load:
-                #         sampled_offs = 0
-                #         sampled_ons  = sampled_load - current_load
-                #     else: # current load and sampled load are equal
-                #         sampled_offs = 0
-                #         sampled_ons  = 0
-
-                # ons  += sampled_ons
-                # offs += sampled_offs
-                # break
 
         # TODO: Have to handle this somehow
         if len(picked_up_list) > 1:

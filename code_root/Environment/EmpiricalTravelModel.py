@@ -2,12 +2,13 @@ import re
 from src.utils import *
 import json
 import warnings
-import pandas as pd
 import osmnx as ox
+import pandas as pd
 from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModel:
@@ -93,13 +94,16 @@ class EmpiricalTravelModel:
     
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
-        next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
-        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
-        
-        # log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
-        return dd / 1000
-    
+        if current_stop and next_stop:
+            current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+            next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+            tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+
+            # log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
+            return dd / 1000
+        else:
+            return -1
+
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
     def get_distance(self, curr_stop, next_stop, _datetime):
         _df = self.sampled_distance.query("stop_id == @curr_stop and next_stop_id == @next_stop")

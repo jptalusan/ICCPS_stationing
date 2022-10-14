@@ -59,9 +59,9 @@ class Simulator:
             valid_actions = self.valid_actions.get_valid_actions(self.state)
             
             chosen_action = self.event_processing_callback(valid_actions, self.state)
-            print(f"Action from MCTS: {self.state.time} @ {chosen_action}")
+            # print(f"Chosen action: {self.state.time} @ {chosen_action}")
 
-            log(self.logger, self.state.time, f"Chosen action by MCTS:{chosen_action}", LogType.INFO)
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.INFO)
 
             if chosen_action:
                 reward, new_events, _ = self.environment_model.take_action(self.state, chosen_action)

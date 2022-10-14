@@ -1,6 +1,7 @@
 from Environment.enums import BusStatus, BusType, ActionType
 import random
 
+
 class SendNearestDispatchPolicy:
     
     def __init__(self, travel_model) -> None:
@@ -18,26 +19,29 @@ class SendNearestDispatchPolicy:
 
         # TODO: fix overload bus is none when ActionType.NO_ACTION
         for action in actions:
-            type         = action['type']
+            action_type = action['type']
             overload_bus = action['overload_bus']
-            info         = action['info']
+            info = action['info']
+
+            if action_type == ActionType.NO_ACTION:
+                return None
 
             current_stop = state.buses[overload_bus].current_stop
+            next_stop = None
 
-            if type == ActionType.OVERLOAD_DISPATCH:
+            if action_type == ActionType.OVERLOAD_DISPATCH:
                 next_stop = info[0]
                 # route_id_dir = info[1]
                 # passenger_arrival_time = info[2]
                 # remaining_count = info[3]
                 # block_trip = info[4]
-            elif type == ActionType.OVERLOAD_TO_BROKEN:
+            elif action_type == ActionType.OVERLOAD_TO_BROKEN:
                 broken_bus = info
                 next_stop = state.buses[info].current_stop
-            elif type == ActionType.OVERLOAD_ALLOCATE:
+            elif action_type == ActionType.OVERLOAD_ALLOCATE:
                 pass
             else:
                 raise "Action not supported"
-                continue
 
             distance = self.travel_model.get_distance_from_stop_to_stop(current_stop, next_stop, state.time)
             actions_with_distance.append((action, distance))
