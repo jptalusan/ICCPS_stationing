@@ -1,9 +1,9 @@
 import copy
 import time
-import random
+import itertools
 from Environment.DataStructures.State import State
 from decision_making.CentralizedMCTS.DataStructures.TreeNode import TreeNode
-from Environment.enums import EventType, ActionType
+from Environment.enums import EventType, ActionType, BusType, BusStatus
 
 
 class BareMinimumRollout:
@@ -60,61 +60,33 @@ class BareMinimumRollout:
     SendNearestDispatch if a vehicle is broken, else do nothing.
     """
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
-        # Get valid actions (ValidActions)
-        # Take Action
-        # Update reward
+        ## Get valid actions (ValidActions)
+        ## Take Action only on breakdowns
+        ## Update reward
         _curr_event = node.event_at_node
         immediate_reward = 0
         new_events = None
         event_time = node.state.time
-
-        # action_type = None
-        # if _curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
-        #     action_type = ActionType.OVERLOAD_TO_BROKEN
-        #     pass
-        # elif _curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-        #     action_type = ActionType.OVERLOAD_DISPATCH
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.VEHICLE_START_TRIP:
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.VEHICLE_FINISH_TRIP:
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.VEHICLE_FINISH_BLOCK:
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP:
-        #     action_type = ActionType.OVERLOAD_DISPATCH
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.PASSENGER_LEAVE_STOP:
-        #     action_type = ActionType.OVERLOAD_DISPATCH
-        #     # Do nothing
-        #     pass
-        # elif _curr_event.event_type == EventType.CONGESTION_LEVEL_CHANGE:
-        #     # Do nothing
-        #     pass
-        # else:
-        #     # print(type(_curr_event.event_type), type(EventType.VEHICLE_START_TRIP))
-        #     raise Exception(f'unsupported event : {_curr_event.event_type}, {EventType.VEHICLE_START_TRIP}')
-        #     pass
-        #
-        # if action_type is not None:
-        #     action_to_take = environment_model.generate_possible_actions(node.state,
-        #                                                                  _curr_event,
-        #                                                                  action_type=action_type)
-        #     if len(action_to_take) > 0:
-        #         action_to_take = random.choice(action_to_take[0])
-        #         # print(f"Rollout: action to take {action_to_take}")
-        #         immediate_reward, new_events, event_time = environment_model.take_action(node.state,
-        #                                                                                 action_to_take)
-
-        action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-        immediate_reward, new_events, event_time = environment_model.take_action(node.state,
-                                                                                action_to_take)
-
+        valid_actions = []
+        action_to_take = None
+        if _curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            broken_bus_id = _curr_event.type_specific_information['bus_id']
+            action_type = ActionType.OVERLOAD_TO_BROKEN
+            idle_overload_buses = []
+            for bus_id, bus_obj in node.state.buses.items():
+                if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
+                    idle_overload_buses.append(bus_id)
+        
+            valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, [broken_bus_id]]
+            valid_actions = list(itertools.product(*valid_actions))
+            valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
+            action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
+        
+        if not action_to_take:
+            action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            
+        # action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         # NOTE: New events returns a list even though its only returning a single event always
         if new_events is not None:
             node.future_events_queue.append(new_events[0])

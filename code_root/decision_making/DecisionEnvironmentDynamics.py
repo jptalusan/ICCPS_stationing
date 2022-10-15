@@ -63,14 +63,16 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         broken_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.status == BusStatus.BROKEN:
-                # log(self.logger, _state.time, f"Found broken bus: {bus_id}.")
-                broken_buses.append(bus_id)
+                # Without checking if a broken bus has already been covered, we try to cover it again
+                # Leading to null values
+                if bus_obj.current_block_trip is not None:
+                    broken_buses.append(bus_id)
             pass
 
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
-            if bus_obj.type == BusType.OVERLOAD:
+            if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
                 idle_overload_buses.append(bus_id)
 
         # Create matrix of overload buses, original bus id, block/trips, stop_id
@@ -103,8 +105,9 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             valid_actions.extend(_valid_actions)
 
         elif action_type == ActionType.OVERLOAD_ALLOCATE:
-            _valid_actions = self.get_valid_allocations(state)
-            valid_actions.extend(_valid_actions)
+            # _valid_actions = self.get_valid_allocations(state)
+            # valid_actions.extend(_valid_actions)
+            pass
 
         # print("mdpEnv::Number of valid actions:", len(valid_actions))
         # print("mdpEnv::Valid actions:", valid_actions)
@@ -161,7 +164,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             # if current_block_trip in self.trips_already_covered:
             #     return []
 
-            log(self.logger, state.time,
+            log(self.logger,
+                state.time,
                 f"Taking MCTS action: {action}, .",
                 LogType.INFO)
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
@@ -169,10 +173,11 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             ofb_obj.bus_block_trips = [current_block_trip]
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no
-            ofb_obj.t_state_change = state.time
+            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
 
             new_events.append(event)
 
@@ -196,6 +201,9 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             stop_no            = broken_bus_obj.current_stop_number
 
             ofb_obj.bus_block_trips = copy.copy([broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips)
+            # Remove None, in case bus has not started trip.
+            ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
+
             ofb_obj.current_block_trip = None
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no - 1
@@ -212,7 +220,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             broken_bus_obj.bus_block_trips = []
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
@@ -242,7 +251,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1))
+                          time=state.time + dt.timedelta(seconds=1),
+                          type_specific_information=ofb_id)
             new_events.append(event)
             # new_events = self.dispatch_policy.
             log(self.logger, state.time,
@@ -274,3 +284,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
 
         # print(f"mdpEnv::reward: {-1 * total_remaining}")
         return -1 * total_remaining
+
+    # TODO: Not sure if this is too hacky or just right (i feel too hacky)
+    def get_rollout_actions(self, state, actions):
+        return self.send_nearest_dispatch.select_overload_to_dispatch(state, actions)

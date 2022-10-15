@@ -105,6 +105,15 @@ class BusDynamics:
         In this case, there is nothing to update for the bus' state, since it is waiting (between trips, before trips).
         If bus is IDLE and event is START_TRIP, activate the bus and assign block_trip to current block trips and measure distance to next stop
         """
+        if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            type_specific_information = curr_event.type_specific_information
+            event_bus_id = type_specific_information['bus_id']
+            current_block_trip = full_state.buses[event_bus_id].current_block_trip
+            if event_bus_id == bus_id:
+                full_state.buses[bus_id].status = BusStatus.BROKEN
+                full_state.buses[bus_id].t_state_change = curr_bus_time
+                return curr_bus_time, False
+            
         if _new_time >= full_state.buses[bus_id].t_state_change:
             # if curr_event.event_type != EventType.VEHICLE_START_TRIP:
             #     return _new_time, False
@@ -112,11 +121,13 @@ class BusDynamics:
             time_of_activation = full_state.buses[bus_id].t_state_change
             # Move trips
             if len(full_state.buses[bus_id].bus_block_trips) > 0:
+                
                 full_state.buses[bus_id].status = BusStatus.IN_TRANSIT
                 current_block_trip = full_state.buses[bus_id].bus_block_trips.pop(0)
                 full_state.buses[bus_id].current_block_trip = current_block_trip
-                bus_block_trips = full_state.buses[bus_id].bus_block_trips
+                # bus_block_trips = full_state.buses[bus_id].bus_block_trips
                 current_stop_number = full_state.buses[bus_id].current_stop_number
+                
                 
                 # Assuming idle buses are start a depot
                 current_depot = full_state.buses[bus_id].current_stop
@@ -131,7 +142,7 @@ class BusDynamics:
                 full_state.buses[bus_id].time_at_last_stop = time_of_activation
                 
                 # For distance
-                next_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, full_state.buses[bus_id].current_stop_number)
+                next_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
                 full_state.buses[bus_id].distance_to_next_stop = self.travel_model.get_distance(current_depot, next_stop_id, _new_time)
 
                 if BusType.OVERLOAD == full_state.buses[bus_id].type:
@@ -160,17 +171,15 @@ class BusDynamics:
         In this case, if a bus is in TRANSIT and is not BROKEN, perform stop pickups if it reaches t_state_change
         If not, it notes the fraction of the journey done.
         """
-        
         if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
             type_specific_information = curr_event.type_specific_information
             event_bus_id = type_specific_information['bus_id']
             current_block_trip = full_state.buses[event_bus_id].current_block_trip
             if event_bus_id == bus_id:
-                log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} broke down.", LogType.ERROR)
                 full_state.buses[bus_id].status = BusStatus.BROKEN
                 full_state.buses[bus_id].t_state_change = curr_bus_time
                 return curr_bus_time, False
-        
+            
         # Calculate travel time to next stop and update t_state_change
         if _new_time >= full_state.buses[bus_id].t_state_change:
             time_of_arrival = full_state.buses[bus_id].t_state_change
@@ -180,9 +189,7 @@ class BusDynamics:
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
             current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
             last_stop_number = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
-            
-            # log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at stop: {current_stop_id}", LogType.INFO)
-            
+
             # Bus running time
             if full_state.buses[bus_id].time_at_last_stop:
                 full_state.buses[bus_id].total_service_time += (_new_time - full_state.buses[bus_id].time_at_last_stop).total_seconds()
@@ -193,10 +200,10 @@ class BusDynamics:
             # If valid stop
             if current_stop_number >= 0:
                 res = self.pickup_passengers(_new_time, bus_id, current_stop_id, full_state)
-                # log(self.logger, _new_time, f"Stop:{current_stop_id}:{full_state.stops[current_stop_id].passenger_waiting}")
             
             # No next stop but maybe has next trips? (will check in idle_update)
             if current_stop_number == last_stop_number:
+                # if full_state.buses[bus_id].status != BusStatus.BROKEN:
                 full_state.buses[bus_id].current_stop_number = 0
                 full_state.buses[bus_id].status = BusStatus.IDLE
 
@@ -338,7 +345,7 @@ class BusDynamics:
         stop_object.total_passenger_ons += ons
         stop_object.total_passenger_offs += offs
         
-        bus_object.current_load = bus_object.current_load + ons - offs - remaining
+        bus_object.current_load = bus_object.current_load + ons - offs
         bus_object.total_passengers_served += ons
         bus_object.total_stops += 1
         

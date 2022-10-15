@@ -52,13 +52,12 @@ class ValidActions:
         broken_buses = []
         for bus_id, bus_obj in _state.buses.items():
             if bus_obj.status == BusStatus.BROKEN:
-                # log(self.logger, _state.time, f"Found broken bus: {bus_id}.")
-
                 # Without checking if a broken bus has already been covered, we try to cover it again
                 # Leading to null values
-                if bus_obj.current_block_trip is not None:
+                bus_block_trips = copy.copy([bus_obj.current_block_trip] + bus_obj.bus_block_trips)
+                bus_block_trips = [x for x in bus_block_trips if x is not None]
+                if len(bus_block_trips) > 0:
                     broken_buses.append(bus_id)
-            pass
 
         # Find idle overload buses
         idle_overload_buses = []

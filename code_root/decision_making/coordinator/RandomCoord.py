@@ -30,6 +30,9 @@ class RandomCoord:
         :param curr_event:
         :return: list of Events
         '''
+        if actions is None:
+            return None
+        
         if len(actions) == 0:
             return None
         

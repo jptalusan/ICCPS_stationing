@@ -37,6 +37,9 @@ class EmpiricalTravelModel:
         
         fp = 'scenarios/baseline/data/stops_node_matching.pkl'
         self.stop_node_matches = pd.read_pickle(fp)
+
+        self.tt_cache = {}
+        self.dd_cache = {}
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
@@ -74,20 +77,31 @@ class EmpiricalTravelModel:
     def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number, _datetime):
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
-        next_stop_id = trip_data['stop_id_original'][current_stop_number]
-        
-        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
-        next_node = self.stop_node_matches.query("stop_id_original == @next_stop_id")['nearest_node'].iloc[0]
-        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
-        
+        next_stop = trip_data['stop_id_original'][current_stop_number]
+
+        if (current_stop, next_stop) in self.tt_cache:
+            tt = self.tt_cache[(current_stop, next_stop)]
+        else:
+            current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+            next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+            tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+            self.tt_cache[(current_stop, next_stop)] = tt
+            self.dd_cache[(current_stop, next_stop)] = dd
         # log(self.logger, _datetime, f'TT depot {current_stop}:{current_node} to {next_stop_id}:{next_node}:tt,dd:{tt:.2f}', LogType.DEBUG)
         return tt
     
     # tt is in seconds
     def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-        current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
-        next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
-        tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+
+        if (current_stop, next_stop) in self.tt_cache:
+            tt = self.tt_cache[(current_stop, next_stop)]
+
+        else:
+            current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+            next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+            tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+            self.tt_cache[(current_stop, next_stop)] = tt
+            self.dd_cache[(current_stop, next_stop)] = dd
         
         # log(self.logger, _datetime, f'TT stop {current_stop}:{current_node} to stop {next_stop}:{next_node}:tt:{tt:.2f}', LogType.DEBUG)
         return tt
@@ -95,9 +109,15 @@ class EmpiricalTravelModel:
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
         if current_stop and next_stop:
-            current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
-            next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
-            tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+
+            if (current_stop, next_stop) in self.dd_cache:
+                dd = self.dd_cache[(current_stop, next_stop)]
+            else:
+                current_node = self.stop_node_matches.query('stop_id_original == @current_stop')['nearest_node'].iloc[0]
+                next_node = self.stop_node_matches.query("stop_id_original == @next_stop")['nearest_node'].iloc[0]
+                tt, dd = self.compute_OSM_travel_time_distance(current_node, next_node)
+                self.tt_cache[(current_stop, next_stop)] = tt
+                self.dd_cache[(current_stop, next_stop)] = dd
 
             # log(self.logger, _datetime, f'DD depot {current_stop}:{current_node} to {next_stop}:{next_node}:dd:{dd/1000:.2f}', LogType.DEBUG)
             return dd / 1000

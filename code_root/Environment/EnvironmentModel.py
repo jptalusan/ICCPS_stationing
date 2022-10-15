@@ -37,7 +37,7 @@ class EnvironmentModel:
             print(state.time)
             assert new_time >= state.time
 
-        print(curr_event)
+        # print(curr_event)
         log(self.logger, state.time, f"Event: {curr_event}", LogType.INFO)
 
         if (curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP) or \
@@ -105,7 +105,10 @@ class EnvironmentModel:
             # if current_block_trip in self.served_trips:
             #     return []
 
-            log(self.logger, state.time, f"Real world Env Taking action: {action}, .", LogType.INFO)
+            log(self.logger,
+                state.time,
+                f"ActionTaken: {action}, .",
+                LogType.INFO)
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
 
             ofb_obj.bus_block_trips = [current_block_trip]
@@ -137,9 +140,17 @@ class EnvironmentModel:
             stop_no = broken_bus_obj.current_stop_number
 
             ofb_obj.bus_block_trips = copy.copy([broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips)
+            # Remove None, in case bus has not started trip.
+            ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
+
             ofb_obj.current_block_trip = None
+            # In case bus has not yet started trip.
+            if stop_no == 0:
+                ofb_obj.current_stop_number = 0
             # Because at this point we already set the state to the next stop.
-            ofb_obj.current_stop_number = stop_no - 1
+            else:
+                ofb_obj.current_stop_number = stop_no - 1
+                
             ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             # Switch passengers
@@ -158,7 +169,8 @@ class EnvironmentModel:
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
-            log(self.logger, state.time, f"Sending takeover overflow bus: {ofb_id} to {broken_bus_obj.current_block_trip} @ stop {broken_bus_obj.current_stop}", LogType.ERROR)
+            log(self.logger, state.time, f"Sending takeover overflow bus: {ofb_id} from {ofb_obj.current_stop} @ stop {broken_bus_obj.current_stop}", LogType.ERROR)
+            # log(self.logger, state.time, f"Sending takeover overflow bus: {ofb_id} to {broken_bus_obj.current_block_trip} @ stop {broken_bus_obj.current_stop}", LogType.ERROR)
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             # print(f"Random Coord: {action}")

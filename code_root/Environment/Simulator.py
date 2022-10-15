@@ -56,24 +56,32 @@ class Simulator:
         while len(self.event_queue) > 0:
             self.update_sim_info()
 
-            valid_actions = self.valid_actions.get_valid_actions(self.state)
+            if self.valid_actions is not None:
+                _valid_actions = self.valid_actions.get_valid_actions(self.state)
+            else:
+                _valid_actions = None
             
-            chosen_action = self.event_processing_callback(valid_actions, self.state)
-            # print(f"Chosen action: {self.state.time} @ {chosen_action}")
+            chosen_action = self.event_processing_callback(_valid_actions, self.state)
+            # print(f"Chosen action: {datetime_to_str(self.state.time)} @ {chosen_action}")
 
-            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.INFO)
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
 
             if chosen_action:
                 reward, new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             
                 for event in new_events:
                     self.add_event(event)
+
+                # print(f"Added {len(new_events)}")
                 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event)
             
             for event in new_events:
                 self.add_event(event)
+
+            # print(f"Added {len(new_events)}")
+            # print(f"Added {new_events}")
 
             # TODO: Figure out if this is needed
             # Adding event to state
@@ -83,6 +91,7 @@ class Simulator:
             # self.save_visualization(update_event.time, granularity_s=None)
             
             # self.log_metrics()
+            # print(f"Events left: {len(self.event_queue)}")
             
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
@@ -153,8 +162,8 @@ class Simulator:
                     remaining_passengers = pw['remaining']
                     block_trip = pw['block_trip']
 
-                    if block_trip in self.trips_already_covered:
-                        continue
+                    # if block_trip in self.trips_already_covered:
+                    #     continue
 
                     if remaining_passengers > 0:
                         log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)

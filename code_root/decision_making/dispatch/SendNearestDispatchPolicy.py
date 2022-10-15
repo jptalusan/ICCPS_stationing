@@ -17,7 +17,6 @@ class SendNearestDispatchPolicy:
 
         actions_with_distance = []
 
-        # TODO: fix overload bus is none when ActionType.NO_ACTION
         for action in actions:
             action_type = action['type']
             overload_bus = action['overload_bus']

@@ -1,12 +1,10 @@
 import copy
-
-from src.utils import *
-from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
-from Environment.enums import LogType, EventType
-from Environment.DataStructures.Event import Event
-import numpy as np
 import datetime as dt
-import pickle
+
+import numpy as np
+from Environment.enums import LogType
+from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
+from src.utils import *
 
 """
 Combine the two files here:
@@ -19,7 +17,7 @@ Combine the two files here:
 """
 
 def run_low_level_mcts(arg_dict):
-    '''
+    """
     arg dict needs:
     current_state,
     event_queue,
@@ -34,15 +32,7 @@ def run_low_level_mcts(arg_dict):
     MCTS_type
     :param arg_dict:
     :return:
-    '''
-
-    #(discount_factor=mcts_discount_factor,
-    #                    mdp_environment_model=mdp_environment_model,
-    #                    rollout_policy=rollout_policy,
-    #                    uct_tradeoff=uct_tradeoff,
-    #                    iter_limit=iter_limit,
-    #                    allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
-    #                    logger=mcts_logger)
+    """
 
     solver = ModularMCTS(mdp_environment_model=arg_dict['mdp_environment_model'],
                          discount_factor=arg_dict['discount_factor'],
@@ -55,6 +45,7 @@ def run_low_level_mcts(arg_dict):
 
     return {'region_id': arg_dict['tree_number'],
             'mcts_res': res}
+
 
 class DecisionMaker:
 
@@ -98,12 +89,18 @@ class DecisionMaker:
 
         chosen_action = self.process_mcts(state)
 
+        if chosen_action is None:
+            return None
         return chosen_action
 
     def process_mcts(self, state):
         # event_queues = self.get_event_chains(state)
         event_queues = self.load_events(state)
-        return self.get_action([state], event_queues)
+        if len(event_queues[0]) <= 0:
+            return None
+
+        result = self.get_action([state], event_queues)
+        return result
 
     # TODO: Do i also modify the states for each new tree?
     def get_action(self, states, event_queues):
@@ -203,22 +200,20 @@ class DecisionMaker:
     * See if vehicles will break down. If a bus is at a stop, have a chance it will break down. Loop through buses.
     * Loop through events and re-sample loads while adding any remaining passengers.
     * Don't touch travel times and distances
+    *
+    * OR: just create chains from data_generation/generate_day_trips.ipynb for ons/offs
+    * AND: just generate new probabilities for breakdown based on bus location
     """
     def load_events(self, state):
         events = copy.copy(state.events)
-        # event_file = 'events_1.pkl'
-        # saved_events = f'/media/seconddrive/JP/gits/mta_simulator_redo/code_root/scenarios/baseline/data/{event_file}'
-        # with open(saved_events, "rb") as f:
-        #     events = pickle.load(f)
-
-        # _events = [event for event in events if state.time <= event.time]
 
         # Rollout lookahead_horizon
         lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
         _events = [event for event in events if state.time <= event.time <= lookahead_horizon]
+        
         # Preventing empty events
-        if len(_events) == 0:
-            # print(f"No events in the MCTS event queue!")
-            _events = [events[0]]
+        # if len(_events) == 0:
+        #     # print(f"No events in the MCTS event queue!")
+        #     _events = [events[0]]
 
         return [_events]

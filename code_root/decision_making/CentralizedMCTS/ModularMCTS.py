@@ -3,7 +3,8 @@ import math
 import random
 import time
 
-from DataStructures.TreeNode import TreeNode
+# from DataStructures.TreeNode import TreeNode
+from decision_making.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType
 
@@ -68,7 +69,7 @@ class ModularMCTS:
             while iter_count < self.iter_limit:
                 iter_count += 1
                 self.execute_iteration(root)
-                # print(f"MCTS {iter_count}")
+                print(f"MCTS {iter_count}")
         else:
             start_processing_time = time.time()
             curr_processing_time = 0
@@ -77,7 +78,7 @@ class ModularMCTS:
                 curr_processing_time = time.time() - start_processing_time
                 iter_count += 1
                 self.execute_iteration(root)
-                # print(f"MCTS {iter_count}")
+                print(f"MCTS {iter_count}")
 
         if len(root.children) == 0:
             root.is_terminal = False
