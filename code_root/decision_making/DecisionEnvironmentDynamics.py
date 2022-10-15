@@ -205,8 +205,12 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
 
             ofb_obj.current_block_trip = None
+            # In case bus has not yet started trip.
+            if stop_no == 0:
+                ofb_obj.current_stop_number = 0
             # Because at this point we already set the state to the next stop.
-            ofb_obj.current_stop_number = stop_no - 1
+            else:
+                ofb_obj.current_stop_number = stop_no - 1
             ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             # Switch passengers
@@ -225,8 +229,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
-            log(self.logger, state.time,
-                f"Sending takeover overflow bus: {ofb_id} to {broken_bus_obj.current_block_trip} @ stop {broken_bus_obj.current_stop}",
+            log(self.logger, state.time, 
+                f"Sending takeover overflow bus: {ofb_id} from {ofb_obj.current_stop} @ stop {broken_bus_obj.current_stop}", 
                 LogType.ERROR)
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:

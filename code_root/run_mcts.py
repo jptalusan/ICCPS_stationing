@@ -258,10 +258,10 @@ if __name__ == '__main__':
 
     mcts_discount_factor = 0.99997
     rollout_policy = BareMinimumRollout()
-    lookahead_horizon_delta_t = 60 * 60 * 0.2  # 60*60*N for N hour horizon
+    lookahead_horizon_delta_t = 60 * 60 * 2  # 60*60*N for N hour horizon
     uct_tradeoff = 1.44
     pool_thread_count = 0
-    iter_limit = 1
+    iter_limit = 100
     allowed_computation_time = 5
     mcts_type = MCTSType.MODULAR_MCTS
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
