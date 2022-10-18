@@ -59,28 +59,6 @@ class EnvironmentModel:
         state.time = new_time
         return new_events
 
-    def compute_reward(self, state):
-        total_remaining = 0
-        for stop_id, stop_obj in state.stops.items():
-            passenger_waiting = stop_obj.passenger_waiting
-            if not passenger_waiting:
-                continue
-
-            for route_id_dir, route_pw in passenger_waiting.items():
-                if not route_pw:
-                    continue
-
-                for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    block_trip = pw['block_trip']
-
-                    if block_trip in self.served_trips:
-                        continue
-
-                    total_remaining += remaining_passengers
-
-        return -1 * total_remaining
-
     def take_action(self, state, action):
         # print("take_action")
         action_type = action['type']
@@ -118,7 +96,7 @@ class EnvironmentModel:
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
 
             new_events.append(event)
 
@@ -165,7 +143,7 @@ class EnvironmentModel:
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
@@ -190,7 +168,7 @@ class EnvironmentModel:
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
             # new_events = self.dispatch_policy.
             log(self.logger, state.time, f"Reallocating overflow bus: {ofb_id} from {current_stop} to {reallocation_stop}", LogType.INFO)
@@ -199,5 +177,4 @@ class EnvironmentModel:
             # Do nothing
             pass
 
-        reward = self.compute_reward(state)
-        return reward, new_events, state.time
+        return new_events, state.time

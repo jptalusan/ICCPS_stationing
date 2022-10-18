@@ -91,6 +91,7 @@ class EmpiricalTravelModelLookup:
         else:
             print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
             raise "Error getting Travel time"
+            # return 100
     
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
@@ -108,8 +109,10 @@ class EmpiricalTravelModelLookup:
                 else:
                     print(f"Distance cannot be computed for {current_stop} and {next_stop}")
                     raise "Error getting distance"
+                    # return 1
         else:
-            return -1
+            raise "Error getting distance"
+            # return -1
             
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
     def get_distance(self, current_stop, next_stop, _datetime):
@@ -130,7 +133,7 @@ class EmpiricalTravelModelLookup:
         else:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
             raise "Error getting distance"
-            return -1
+            # return -1
     
     # Can probably move to a different file next time
     def get_next_stop(self, current_block_trip, current_stop_sequence):

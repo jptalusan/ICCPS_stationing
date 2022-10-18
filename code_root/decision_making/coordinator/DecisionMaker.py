@@ -39,7 +39,8 @@ def run_low_level_mcts(arg_dict):
                          iter_limit=arg_dict['iter_limit'],
                          allowed_computation_time=arg_dict['allowed_computation_time'],
                          rollout_policy=arg_dict['rollout_policy'],
-                         logger=arg_dict['logger'])
+                         logger=arg_dict['logger'],
+                         exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'])
 
     res = solver.solve(arg_dict['current_state'], arg_dict['event_queue'])
 
@@ -85,7 +86,7 @@ class DecisionMaker:
         self.event_counter += 1
 
         # print(f"DecisionMaker::event_processing_callback_funct({self.event_counter})")
-        log(self.logger, state.time, f"Event processing callback", LogType.DEBUG)
+        # log(self.logger, state.time, f"Event processing callback", LogType.DEBUG)
 
         chosen_action = self.process_mcts(state)
 
@@ -97,6 +98,8 @@ class DecisionMaker:
         # event_queues = self.get_event_chains(state)
         event_queues = self.load_events(state)
         if len(event_queues[0]) <= 0:
+            print("No event available...")
+            # raise "No event available. should not happen?"
             return None
 
         result = self.get_action([state], event_queues)
@@ -142,18 +145,20 @@ class DecisionMaker:
                     avg_action_scores.append({'action': res['action'],
                                               'avg_score': np.mean(res['scores'])})
 
+                # We want the actions which result in the least passengers left behind
                 best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
 
             # print(f"DecisionMaker scores:{avg_action_scores}")
 
             for region_id, action_dict in best_actions.items():
-                for resp_id, depot_id in action_dict.items():
-                    final_action[resp_id] = depot_id
+                for resp_id, action_id in action_dict.items():
+                    final_action[resp_id] = action_id
 
-        # print(f"DecisionMaker res_dict:{res_dict[0]}")
-        # print(f"DecisionMaker final action:{final_action}")
-        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
-
+        print(f"Event counter: {self.event_counter}")
+        print(f"DecisionMaker res_dict:{res_dict[0]}")
+        print(f"DecisionMaker final action:{final_action}")
+        print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+        print()
         log(self.logger, states[0].time, f"MCTS Decision: {final_action}")
         return final_action
 
@@ -182,6 +187,7 @@ class DecisionMaker:
             input_dict['mdp_environment_model'] = mdp_environment_model
             input_dict['discount_factor'] = discount_factor
             input_dict['iter_limit'] = iter_limit
+            input_dict['exploit_explore_tradoff_param'] = uct_tradeoff
             input_dict['allowed_computation_time'] = allowed_computation_time
             input_dict['rollout_policy'] = copy.deepcopy(rollout_policy)
             input_dict['event_queue'] = copy.deepcopy(event_queues[i])
@@ -208,8 +214,11 @@ class DecisionMaker:
         events = copy.copy(state.events)
 
         # Rollout lookahead_horizon
-        lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
-        _events = [event for event in events if state.time <= event.time <= lookahead_horizon]
+        if self.lookahead_horizon_delta_t:
+            lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
+            _events = [event for event in events if state.time <= event.time <= lookahead_horizon]
+        else:
+            _events = [event for event in events if state.time <= event.time]
         
         # Preventing empty events
         # if len(_events) == 0:

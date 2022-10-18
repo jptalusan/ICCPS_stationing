@@ -46,4 +46,5 @@ class SendNearestDispatchPolicy:
             actions_with_distance.append((action, distance))
 
         actions_with_distance = sorted(actions_with_distance, key=lambda x: x[1], reverse=False)
+        # print(actions_with_distance)
         return actions_with_distance[0][0]

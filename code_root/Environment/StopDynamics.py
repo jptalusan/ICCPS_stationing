@@ -24,7 +24,7 @@ class StopDynamics:
                 
             # Initial values for the passenger dictionary
             passenger_waiting[curr_route_id_dir] = {}
-            passenger_waiting[curr_route_id_dir][_new_time] = {'load':curr_stop_load, 'remaining':0, 'block_trip': "", 'ons':curr_stop_ons, 'offs':curr_stop_offs}
+            passenger_waiting[curr_route_id_dir][_new_time] = {'got_on_bus':0, 'remaining':0, 'block_trip': "", 'ons':curr_stop_ons, 'offs':curr_stop_offs}  # 'load':curr_stop_load, 
             
             full_state.stops[curr_stop_id].passenger_waiting = passenger_waiting
             
@@ -47,6 +47,11 @@ class StopDynamics:
 
             if time_key in passenger_waiting[curr_route_id_dir]:
                 remaining = passenger_waiting[curr_route_id_dir][time_key]['remaining']
+                got_on_bus = passenger_waiting[curr_route_id_dir][time_key]['got_on_bus']
+                ons = passenger_waiting[curr_route_id_dir][time_key]['ons']
+                
+                if got_on_bus == 0:
+                    remaining = ons
                 
                 # Count remaining people as walk-offs
                 full_state.stops[curr_stop_id].total_passenger_walk_away += remaining

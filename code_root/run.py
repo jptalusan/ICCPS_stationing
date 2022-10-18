@@ -93,7 +93,7 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     stop_list = []
     
     # event_file = 'events_all_vehicles.pkl'
-    event_file = 'events_1.pkl'
+    event_file = 'events_2_vehicles.pkl'
     saved_events = f'scenarios/baseline/data/{event_file}'
     
     pbar = tqdm(Buses.items())
@@ -110,7 +110,9 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
             st   = trip_plan[trip]['scheduled_time']
             st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
             event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {st}")
-            event = Event(event_type=EventType.VEHICLE_START_TRIP, time=event_datetime)
+            event = Event(event_type=EventType.VEHICLE_START_TRIP,
+                          time=event_datetime,
+                          type_specific_information={'bus_id': bus_id})
             events.append(event)
             
             # Populate stops
@@ -244,7 +246,7 @@ if __name__ == '__main__':
                                                   buses=Buses,
                                                   bus_id='129',
                                                   # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
-                                                  time=str_timestamp_to_datetime('2021-08-23 14:19:00'))
+                                                  time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
 
     starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=starting_datetime))
     simulator = Simulator(starting_event_queue=copy.deepcopy(passenger_events),

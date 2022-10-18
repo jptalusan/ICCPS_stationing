@@ -27,6 +27,8 @@ import numpy as np
 import pandas as pd
 import spdlog as spd
 import datetime as dt
+import sys
+
 
 
 # TODO: Have the ability to save and load states from file.
@@ -93,14 +95,14 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     # all active stops that buses will pass
     events = []
 
-    event_datetime = str_timestamp_to_datetime(f"{starting_date_str} 00:00:00")
-    event = Event(event_type=EventType.CONGESTION_LEVEL_CHANGE, time=event_datetime)
-    events.append(event)
+    # event_datetime = str_timestamp_to_datetime(f"{starting_date_str} 00:00:00")
+    # event = Event(event_type=EventType.CONGESTION_LEVEL_CHANGE, time=event_datetime)
+    # events.append(event)
 
     stop_list = []
 
     # event_file = 'events_all_vehicles.pkl'
-    event_file = 'events_1.pkl'
+    event_file = 'events_2_vehicles.pkl'
     saved_events = f'scenarios/baseline/data/{event_file}'
 
     pbar = tqdm(Buses.items())
@@ -117,7 +119,9 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
             st = trip_plan[trip]['scheduled_time']
             st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
             event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {st}")
-            event = Event(event_type=EventType.VEHICLE_START_TRIP, time=event_datetime)
+            event = Event(event_type=EventType.VEHICLE_START_TRIP,
+                          time=event_datetime,
+                          type_specific_information={'bus_id': bus_id})
             events.append(event)
 
             # Populate stops
@@ -197,7 +201,10 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 
 if __name__ == '__main__':
+    
     datetime_str = dt.datetime.strftime(dt.date.today(), DATETIME_FORMAT)
+    # sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
+    
     spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
     logger = spd.get('test')
     logger.set_pattern("[%l] %v")
@@ -252,17 +259,19 @@ if __name__ == '__main__':
                                                   buses=Buses,
                                                   bus_id='129',
                                                   # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
-                                                  time=str_timestamp_to_datetime('2021-08-23 14:19:00'))
+                                                  time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
 
     starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=starting_datetime))
 
     mcts_discount_factor = 0.99997
+    # mcts_discount_factor = 1
     rollout_policy = BareMinimumRollout()
-    lookahead_horizon_delta_t = 60 * 60 * 2  # 60*60*N for N hour horizon
+    lookahead_horizon_delta_t = 60 * 60 * 1  # 60*60*N for N hour horizon
+    # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = 1.44
     pool_thread_count = 0
-    iter_limit = 100
-    allowed_computation_time = 5
+    iter_limit = 20
+    allowed_computation_time = 15
     mcts_type = MCTSType.MODULAR_MCTS
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
                                                         dispatch_policy,
@@ -300,3 +309,6 @@ if __name__ == '__main__':
                           logger=logger)
 
     simulator.run_simulation()
+
+
+    # sys.stdout.close()

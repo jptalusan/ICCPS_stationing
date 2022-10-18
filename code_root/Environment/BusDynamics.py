@@ -289,6 +289,7 @@ class BusDynamics:
         offs = 0
         remaining = 0
         sampled_load = 0
+        got_on_bus = 0
         
         if not passenger_waiting:
             return True
@@ -299,31 +300,39 @@ class BusDynamics:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
                 assert passenger_arrival_time <= _new_time
                 remaining = sampled_data['remaining']
-                sampled_load = sampled_data['load']
+                # sampled_load = sampled_data['load']
                 sampled_ons = sampled_data['ons']
                 sampled_offs = sampled_data['offs']
 
                 if remaining > 0:
                     sampled_ons = remaining
+                    remaining = 0
                 
                 ons  += sampled_ons
-                # Might have issues here
-                if current_load > sampled_load:
-                    percent_offs = (current_load - sampled_load) / current_load
-                    sampled_offs = math.floor(percent_offs * current_load)
-                sampled_offs = min(current_load, sampled_offs)
+                # # Might have issues here
+                # if current_load > sampled_load:
+                #     percent_offs = (current_load - sampled_load) / current_load
+                #     sampled_offs = math.floor(percent_offs * current_load)
+                # sampled_offs = min(current_load, sampled_offs)
                 offs += sampled_offs
+                
                 
                 picked_up_list.append(passenger_arrival_time)
 
         # TODO: Have to handle this somehow
         if len(picked_up_list) > 1:
             log(self.logger, _new_time, f"Bus {bus_id} @ {stop_id}: picked up multiple sets of passengers {picked_up_list}", LogType.INFO)
+        
+        log(self.logger, _new_time, f"{stop_id} current ons: {ons}/{offs}/{bus_object.current_load}", LogType.DEBUG)
+            
+        if offs > bus_object.current_load:
+            offs = bus_object.current_load
             
         if (bus_object.current_load + ons - offs) > vehicle_capacity:
             remaining = bus_object.current_load + ons - offs - vehicle_capacity
-            ons = ons - remaining
+            got_on_bus = max(0, ons - remaining)
         else:
+            got_on_bus = ons
             remaining = 0
         
         # Special cases for the first and last stops
@@ -331,23 +340,26 @@ class BusDynamics:
             offs = 0
         elif current_stop_number == last_stop_in_trip:
             offs = bus_object.current_load
-            ons = 0
+            got_on_bus = 0
             remaining = 0
         
         # Delete passenger_waiting
         if remaining == 0:
             passenger_waiting[route_id_dir] = {}
         else:
-            passenger_waiting[route_id_dir] = {passenger_arrival_time: {'load':ons, 'remaining':remaining, 'block_trip': current_block_trip, 'ons':ons, 'offs':offs}}
+            passenger_waiting[route_id_dir] = {passenger_arrival_time: {'got_on_bus':got_on_bus, 'remaining':remaining, 'block_trip': current_block_trip, 'ons':ons, 'offs':offs}}
             log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
 
         stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
-        stop_object.total_passenger_ons += ons
+        stop_object.total_passenger_ons += got_on_bus
         stop_object.total_passenger_offs += offs
         
-        bus_object.current_load = bus_object.current_load + ons - offs
-        bus_object.total_passengers_served += ons
+        bus_object.current_load = bus_object.current_load + got_on_bus - offs
+        bus_object.total_passengers_served += got_on_bus
         bus_object.total_stops += 1
         
-        log(self.logger, _new_time, f"Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} arrives at @ {stop_id}: on:{ons:.0f}, offs:{offs:.0f}, remain:{remaining:.0f}, load:{bus_object.current_load:.0f}", LogType.INFO)
+        log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
+arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
+remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
+        log(self.logger, _new_time, log_str, LogType.INFO)
         return True

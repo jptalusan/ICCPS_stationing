@@ -21,7 +21,6 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         # self.trips_already_covered = []
         # self.served_buses          = []
 
-    # Have to include "NO ACTION"
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
         num_available_buses = len(
             [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
@@ -112,12 +111,16 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         # print("mdpEnv::Number of valid actions:", len(valid_actions))
         # print("mdpEnv::Valid actions:", valid_actions)
 
+        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        
         if len(valid_actions) > 0:
             valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
+            # Always add do nothing as a possible option
+            valid_actions.append(do_nothing_action)
         else:
             # No action
-            valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
-
+            valid_actions = [do_nothing_action]
+        
         action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
         return valid_actions, action_taken_tracker
 
@@ -164,10 +167,10 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             # if current_block_trip in self.trips_already_covered:
             #     return []
 
-            log(self.logger,
-                state.time,
-                f"Taking MCTS action: {action}, .",
-                LogType.INFO)
+            # log(self.logger,
+            #     state.time,
+            #     f"Taking MCTS action: {action}, .",
+            #     LogType.INFO)
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
 
             ofb_obj.bus_block_trips = [current_block_trip]
@@ -177,7 +180,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
 
             new_events.append(event)
 
@@ -192,9 +195,9 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             # if broken_bus_id in self.served_buses:
             #     return []
 
-            log(self.logger, state.time,
-                f"Taking MCTS action: {action}, .",
-                LogType.INFO)
+            # log(self.logger, state.time,
+            #     f"Taking MCTS action: {action}, .",
+            #     LogType.INFO)
             broken_bus_obj = state.buses[broken_bus_id]
 
             current_block_trip = broken_bus_obj.current_block_trip
@@ -225,13 +228,13 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
 
             # self.served_buses.append(broken_bus_id)
-            log(self.logger, state.time, 
-                f"Sending takeover overflow bus: {ofb_id} from {ofb_obj.current_stop} @ stop {broken_bus_obj.current_stop}", 
-                LogType.ERROR)
+            # log(self.logger, state.time,
+            #     f"Sending takeover overflow bus: {ofb_id} from {ofb_obj.current_stop} @ stop {broken_bus_obj.current_stop}",
+            #     LogType.ERROR)
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             # print(f"Random Coord: {action}")
@@ -256,24 +259,34 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time + dt.timedelta(seconds=1),
-                          type_specific_information=ofb_id)
+                          type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
             # new_events = self.dispatch_policy.
-            log(self.logger, state.time,
-                f"Reallocating overflow bus: {ofb_id} from {current_stop} to {reallocation_stop}",
-                LogType.INFO)
+            # log(self.logger, state.time,
+            #     f"Reallocating overflow bus: {ofb_id} from {current_stop} to {reallocation_stop}",
+            #     LogType.INFO)
+            
+            # QUESTION: Not sure here
+            # return 0, new_events, state.time
 
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
             new_events = None
-            pass
+            
+            # Not sure here
+            # return 0, new_events, state.time
 
+        # QUESTION: Won't this reward be computed before any update has been done based on the action that has been taken?
         reward = self.compute_reward(state)
         return reward, new_events, state.time
 
     def compute_reward(self, state):
+        total_walk_aways = 0
         total_remaining = 0
-        for stop_id, stop_obj in state.stops.items():
+        total_passenger_ons = 0
+        for _, stop_obj in state.stops.items():
+            total_walk_aways += stop_obj.total_passenger_walk_away
+            total_passenger_ons += stop_obj.total_passenger_ons
             passenger_waiting = stop_obj.passenger_waiting
             if not passenger_waiting:
                 continue
@@ -286,8 +299,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
                     remaining_passengers = pw['remaining']
                     total_remaining += remaining_passengers
 
-        # print(f"mdpEnv::reward: {-1 * total_remaining}")
-        return -1 * total_remaining
+        return (-1 * total_walk_aways)  + (-1 * total_remaining)  #+ total_passenger_ons
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

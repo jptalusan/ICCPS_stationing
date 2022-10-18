@@ -17,13 +17,15 @@ class ModularMCTS:
                  rollout_policy,
                  iter_limit,
                  allowed_computation_time,
-                 logger
+                 logger,
+                 exploit_explore_tradoff_param
                  ):
         self.allowed_computation_time = allowed_computation_time
         self.rollout_policy = rollout_policy
         self.iter_limit = iter_limit
         self.mdp_environment_model = mdp_environment_model
         self.discount_factor = discount_factor
+        self.exploit_explore_tradoff_param = exploit_explore_tradoff_param
 
         self.solve_start_time = None
         self.number_of_nodes = None
@@ -35,7 +37,7 @@ class ModularMCTS:
 
         self.logger = logger
 
-    # TODO: What would happen if there are no events in that horizon/batch/tree?
+    # QUESTION: What would happen if there are no events in that horizon/batch/tree?
     def solve(self,
               state,
               starting_event_queue):
@@ -69,7 +71,7 @@ class ModularMCTS:
             while iter_count < self.iter_limit:
                 iter_count += 1
                 self.execute_iteration(root)
-                print(f"MCTS {iter_count}")
+                # print(f"MCTS {iter_count}")
         else:
             start_processing_time = time.time()
             curr_processing_time = 0
@@ -78,8 +80,10 @@ class ModularMCTS:
                 curr_processing_time = time.time() - start_processing_time
                 iter_count += 1
                 self.execute_iteration(root)
-                print(f"MCTS {iter_count}")
-
+                # print(f"MCTS {iter_count}")
+                
+        print(f"MCTS solve(), {len(possible_actions)} possible actions.")
+        
         if len(root.children) == 0:
             root.is_terminal = False
             new_root_actions_taken_tracker = []
@@ -123,7 +127,7 @@ class ModularMCTS:
         best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
         actions_with_scores = self.get_scored_child_actions(root)
 
-        # print(f"MCTS action with scores: {actions_with_scores}")
+        print(f"MCTS action with scores: {actions_with_scores}")
 
         return {'scored_actions': actions_with_scores,
                 'number_nodes': self.number_of_nodes,
@@ -134,8 +138,8 @@ class ModularMCTS:
         scored_actions = []
         for child in node.children:
             action = child.action_to_get_here
+            score = child.score / child.num_visits
             num_visits = child.num_visits
-            score = child.score / num_visits
 
             scored_actions.append({'action': action,
                                    'score': score,
@@ -223,7 +227,6 @@ class ModularMCTS:
         actions_taken_to_new_node = copy.copy(node.action_sequence_to_here)
         actions_taken_to_new_node.append(action_to_take)
 
-        # NOTE: Not implemented, returns 0
         discounted_immediate_score = self.standard_discounted_score(immediate_reward,
                                                                     event_time - self.solve_start_time,
                                                                     self.discount_factor)
@@ -301,11 +304,17 @@ class ModularMCTS:
             elif value == best_val:
                 best_nodes.append(child)
 
-        # random.seed(100)
+        random.seed(100)
         return random.choice(best_nodes)
 
     def uct_score(self, node):
         exploit = (node.score / node.num_visits)
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
-        score = exploit + explore
+        
+        # I just copied from Ava's code
+        scaled_explore_param = self.exploit_explore_tradoff_param * abs(exploit)
+        scaled_explore_2 = scaled_explore_param * explore
+        score = exploit + scaled_explore_2
+        
+        # score = exploit + explore
         return score

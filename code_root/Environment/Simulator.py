@@ -67,7 +67,7 @@ class Simulator:
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
 
             if chosen_action:
-                reward, new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             
                 for event in new_events:
                     self.add_event(event)
@@ -80,12 +80,6 @@ class Simulator:
             for event in new_events:
                 self.add_event(event)
 
-            # print(f"Added {len(new_events)}")
-            # print(f"Added {new_events}")
-
-            # TODO: Figure out if this is needed
-            # Adding event to state
-            # print(f"Event queue len: {len(self.event_queue)}")
             self.state.events = copy.copy(self.event_queue)
 
             # self.save_visualization(update_event.time, granularity_s=None)
@@ -150,30 +144,35 @@ class Simulator:
             log(self.logger, dt.datetime.now(), f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
 
         for stop_id, stop_obj in self.state.stops.items():
-            passenger_waiting = stop_obj.passenger_waiting
-            if not passenger_waiting:
-                continue
+            if stop_obj.total_passenger_walk_away > 0:
+                log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
+                log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
+                log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
+                log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}", LOGTYPE)
 
-            for route_id_dir, route_pw in passenger_waiting.items():
-                if not route_pw:
-                    continue
-
-                for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    block_trip = pw['block_trip']
-
-                    # if block_trip in self.trips_already_covered:
-                    #     continue
-
-                    if remaining_passengers > 0:
-                        log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
-                        log(self.logger, dt.datetime.now(), f"Remaining: {remaining_passengers}", LOGTYPE)
-
+        total_walk_aways = 0
+        total_arrivals = 0
+        total_boardings = 0
+        for stop_id, stop_obj in self.state.stops.items():
+            total_walk_aways += stop_obj.total_passenger_walk_away
+            total_boardings += stop_obj.total_passenger_ons
+            total_arrivals += stop_obj.total_passenger_ons + stop_obj.total_passenger_walk_away
+                
+        log(self.logger, dt.datetime.now(), f"Count of all passengers: {total_arrivals}", LOGTYPE)
+        log(self.logger, dt.datetime.now(), f"Count of all passengers who boarded: {total_boardings}", LOGTYPE)
+        log(self.logger, dt.datetime.now(), f"Count of all passengers who left: {total_walk_aways}", LOGTYPE)
+            
         # for stop_id, stop_obj in self.state.stops.items():
         #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
         #     log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
         #     log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
         #     log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}", LOGTYPE)
+            # total_walk_aways += stop_obj.total_passenger_walk_away
+            # total_boardings += stop_obj.total_passenger_ons
+            # total_arrivals += total_boardings + total_walk_aways
+        # log(self.logger, dt.datetime.now(), f"Count of all passengers: {total_arrivals}", LOGTYPE)
+        # log(self.logger, dt.datetime.now(), f"Count of all passengers who boarded: {total_boardings}", LOGTYPE)
+        # log(self.logger, dt.datetime.now(), f"Count of all passengers who left: {total_walk_aways}", LOGTYPE)
             
     def save_visualization(self, event_time, granularity_s=None):
         if not self.last_visual_log:
