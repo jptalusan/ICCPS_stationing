@@ -19,8 +19,8 @@ class BareMinimumRollout:
 
     def __init__(self):
         self.deep_copy_time = 0
-        # self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon
-        self.rollout_horizon_delta_t = None
+        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon
+        # self.rollout_horizon_delta_t = None
 
         config_path = 'scenarios/baseline/data/trip_plan.json'
         with open(config_path) as f:

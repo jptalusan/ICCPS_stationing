@@ -30,7 +30,6 @@ import datetime as dt
 import sys
 
 
-
 # TODO: Have the ability to save and load states from file.
 def load_initial_state(bus_plan, trip_plan, random_seed=100):
     print("Loading initial states...")

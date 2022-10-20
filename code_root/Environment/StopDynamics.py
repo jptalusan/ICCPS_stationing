@@ -1,4 +1,3 @@
-import copy
 from src.utils import *
 from Environment.enums import LogType, EventType
 
