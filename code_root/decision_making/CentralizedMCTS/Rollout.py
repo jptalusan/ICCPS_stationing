@@ -1,6 +1,8 @@
 import copy
+from multiprocessing.resource_sharer import stop
 import time
 import json
+import pickle
 import datetime as dt
 import pandas as pd
 from Environment.DataStructures.State import State
@@ -17,18 +19,16 @@ class BareMinimumRollout:
 
     def __init__(self):
         self.deep_copy_time = 0
-        self.debug_rewards = []
-        self.curr_event = None
-        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon
-        # self.rollout_horizon_delta_t = None
+        # self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon
+        self.rollout_horizon_delta_t = None
 
         config_path = 'scenarios/baseline/data/trip_plan.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
-        lookup_path = 'scenarios/baseline/data/pair_tt_dd_stops.pkl'
-        self.lookup_tt_dd = pd.read_pickle(lookup_path)
-
+        with open('scenarios/baseline/data/stops_tt_dd_dict.pkl', 'rb') as handle:
+            self.lookup_tt_dd = pickle.load(handle)
+            
         self.total_walkaways = 0
 
     def rollout(self,
@@ -38,22 +38,24 @@ class BareMinimumRollout:
                 solve_start_time):
         s_copy_time = time.time()
         self.debug_rewards = []
-        self.curr_event = None
         self.total_walkaways = 0
 
         truncated_events = copy.copy(node.future_events_queue)
-
+        
         if self.rollout_horizon_delta_t is not None:
-            lookahead_horizon = node.state.time + dt.timedelta(seconds=self.rollout_horizon_delta_t)
+            if node.state.time.time() == dt.time(0, 0, 0):
+                start_time = truncated_events[0].time
+            else:
+                start_time = node.state.time
+                
+            lookahead_horizon = start_time + dt.timedelta(seconds=self.rollout_horizon_delta_t)
             truncated_events = [event for event in truncated_events if
-                                node.state.time <= event.time <= lookahead_horizon]
+                                start_time <= event.time <= lookahead_horizon]
 
         _state = State(
             stops=copy.deepcopy(node.state.stops),
             buses=copy.deepcopy(node.state.buses),
             events=truncated_events,
-            # events=copy.copy(node.future_events_queue),
-            # events=copy.copy(node.state.events),
             time=node.state.time
         )
 
@@ -73,19 +75,16 @@ class BareMinimumRollout:
             actions_taken_tracker=None,
             action_sequence_to_here=None,
             event_at_node=node.event_at_node,
-            # future_events_queue=copy.copy(node.future_events_queue)
-            future_events_queue=truncated_events
+            future_events_queue=copy.copy(node.future_events_queue)
         )
 
         self.deep_copy_time += time.time() - s_copy_time
 
         # Run until all events finish
+        
         while _node.future_events_queue:
             self.rollout_iter(_node, environment_model, discount_factor, solve_start_time)
 
-        # print(f"Total walk aways: {self.total_walkaways}")
-        # [print(dr) for dr in self.debug_rewards if dr['type'] != ActionType.NO_ACTION]
-        # print()
         return _node.reward_to_here
 
     """
@@ -93,17 +92,20 @@ class BareMinimumRollout:
     """
 
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
-        valid_actions, _ = environment_model.generate_possible_actions(node.state, None)
+        # valid_actions, _ = environment_model.generate_possible_actions(node.state, 
+        #                                                                None, 
+        #                                                                action_type=ActionType.ROLLOUT)
 
-        # Send nearest dispatch
-        action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
-        if not action_to_take:
-            action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        # # Send nearest dispatch
+        # action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
+        # if not action_to_take:
+        #     action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         # Comment this and uncomment above if needs more complex rollout
-        # action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
+        
         # NOTE: New events returns a list even though its only returning a single event always
         if new_events is not None:
             node.future_events_queue.append(new_events[0])
@@ -122,8 +124,6 @@ class BareMinimumRollout:
                                                                     discount_factor)
 
         node.reward_to_here = node.reward_to_here + discounted_immediate_score
-
-        self.debug_rewards.append(action_to_take)
 
     """
     - Plan, create a vector in state that is just [[stops][remainings] for passenger arrivals
@@ -146,7 +146,6 @@ class BareMinimumRollout:
             event_bus_id = type_specific_information['bus_id']
             current_block_trip = state.buses[event_bus_id].current_block_trip
             state.buses[event_bus_id].status = BusStatus.BROKEN
-            # state.buses[event_bus_id].t_state_change = state.time
 
         elif event.event_type == EventType.PASSENGER_ARRIVE_STOP:
             additional_info = event.type_specific_information
@@ -201,6 +200,7 @@ class BareMinimumRollout:
             additional_info = event.type_specific_information
             bus_id = additional_info['bus_id']
             bus_state = state.buses[bus_id].status
+            bus_type = state.buses[bus_id].type
 
             if BusStatus.IDLE == bus_state:
                 if len(state.buses[bus_id].bus_block_trips) > 0:
@@ -208,7 +208,18 @@ class BareMinimumRollout:
                     state.buses[bus_id].status = BusStatus.IN_TRANSIT
                     current_block_trip = state.buses[bus_id].bus_block_trips.pop(0)
                     state.buses[bus_id].current_block_trip = current_block_trip
-                    travel_time = 100
+                    current_depot = state.buses[bus_id].current_stop
+                    current_stop_number = state.buses[bus_id].current_stop_number
+                    
+                    if BusType.OVERLOAD == bus_type:
+                        deadkms = self.get_distance_from_depot(current_block_trip,
+                                                               current_depot,
+                                                               current_stop_number)
+                        state.buses[bus_id].total_deadkms_moved += deadkms
+
+                    travel_time = self.get_travel_time_from_depot(current_block_trip,
+                                                                  current_depot,
+                                                                  current_stop_number)
                     time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
 
                     event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
@@ -217,15 +228,26 @@ class BareMinimumRollout:
                                                              'current_block_trip': current_block_trip,
                                                              'stop': state.buses[bus_id].current_stop_number})
                     new_events.append(event)
-                # no more trips left
+                
                 else:
-                    raise "Should not have an IN_TRANSIT bus starting a trip."
+                    # no more trips left
                     pass
 
             elif BusStatus.IN_TRANSIT == bus_state:
                 # print(f"Bus {bus_id} is IN TRANSIT")
                 pass
+            
+            elif BusStatus.BROKEN == bus_state:
+                pass
+            
+            # TODO: Not sure here.
+            elif BusStatus.ALLOCATION == bus_state:
+                distance_to_next_stop = state.buses[bus_id].distance_to_next_stop
+                state.buses[bus_id].total_deadkms_moved += distance_to_next_stop
 
+        # TODO: Could probably add the distance here and see if its deadmiles based on status ALLOCATION and type OVERLOAD
+        # TODO: The issue now i think is that the bus arrives earlier than the people arrive at the stop so no data is entered.
+        # Have to setup the delay here
         elif event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
             additional_info = event.type_specific_information
             bus_id = additional_info['bus_id']
@@ -257,8 +279,27 @@ class BareMinimumRollout:
                 # Going to next stop
                 else:
                     state.buses[bus_id].current_stop_number = current_stop_number + 1
-                    travel_time = 100
+
+                    # travel_time = 100
+                    travel_time = self.get_travel_time_from_depot(current_block_trip, current_stop_id,
+                                                                  state.buses[bus_id].current_stop_number)
+                    
+                    scheduled_arrival_time = self.get_scheduled_arrival_time(current_block_trip, 
+                                                                             state.buses[bus_id].current_stop_number)
+                    
                     time_to_state_change = time_of_arrival + dt.timedelta(seconds=travel_time)
+                    
+                    # Taking into account delay time
+                    if scheduled_arrival_time < time_to_state_change:
+                        delay_time = time_to_state_change - scheduled_arrival_time
+                        state.buses[bus_id].delay_time += delay_time.total_seconds()
+                        
+                    # TODO: Not the best place to put this, Dwell time
+                    elif scheduled_arrival_time > time_to_state_change:
+                        dwell_time = scheduled_arrival_time - time_to_state_change
+                        state.buses[bus_id].dwell_time += dwell_time.total_seconds()
+                        time_to_state_change = time_to_state_change + dwell_time
+                        
                     state.buses[bus_id].t_state_change = time_to_state_change
                     event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                                   time=time_to_state_change,
@@ -266,7 +307,10 @@ class BareMinimumRollout:
                                                              'current_block_trip': current_block_trip,
                                                              'stop': state.buses[bus_id].current_stop_number})
                     new_events.append(event)
-
+            
+            elif BusStatus.BROKEN == bus_state:
+                pass
+            
         # print(f"Event: {event}")
         return new_events
 
@@ -291,7 +335,6 @@ class BareMinimumRollout:
         if not passenger_waiting:
             return True
 
-        # TODO: Pickup passengers and retain only the latest arrivals
         picked_up_list = []
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
@@ -345,6 +388,14 @@ class BareMinimumRollout:
 
         return True
 
+    ############# LOOK UP ################
+    def get_scheduled_arrival_time(self, current_block_trip, current_stop_sequence):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        arrival_time_str = trip_data['scheduled_time'][current_stop_sequence]
+        scheduled_arrival_time = str_timestamp_to_datetime(arrival_time_str)
+        return scheduled_arrival_time
+    
     def get_last_stop_number_on_trip(self, current_block_trip):
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
@@ -363,3 +414,69 @@ class BareMinimumRollout:
         route_id = trip_data['route_id']
         route_direction = trip_data['route_direction']
         return str(route_id) + "_" + route_direction
+
+    def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        next_stop = trip_data['stop_id_original'][current_stop_number]
+
+        if (current_stop is not None) and (current_stop == next_stop):
+            return 0
+        
+#         {'travel_time_s': 338.8999999999999,
+#          'distance_m': 5212.0,
+#          'current_stop': 'BAPSEMNN',
+#          'next_stop': 'MCC5_1'}
+        
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            tt = self.lookup_tt_dd[key]['travel_time_s']
+            return tt
+        else:
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                tt = self.lookup_tt_dd[key]['travel_time_s']
+                return tt
+            print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
+            raise "Error getting Travel time"
+
+    def get_distance_from_depot(self, current_block_trip, current_stop, current_stop_number):
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        next_stop = trip_data['stop_id_original'][current_stop_number]
+
+        if (current_stop is not None) and (current_stop == next_stop):
+            return 0
+        
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            dd = self.lookup_tt_dd[key]['distance_m']
+            return dd / 1000
+        else:
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                dotdict = self.lookup_tt_dd[key]['distance_m']
+                return dd / 1000
+            print(f"Distance cannot be computed for {current_stop} and {next_stop}")
+            raise "Error getting Distance"
+        
+    def get_stop_to_stop_distance(self, current_stop, next_stop):
+        if (current_stop is not None) and (current_stop == next_stop):
+            return 0
+        
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            dd = self.lookup_tt_dd[key]['distance_m']
+            return dd / 1000
+        else:
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                dotdict = self.lookup_tt_dd[key]['distance_m']
+                return dd / 1000
+            print(f"Distance cannot be computed for {current_stop} and {next_stop}")
+            raise "Error getting Distance"
+        
+# TODO: Add the distances, see if just changing the pandas to dicts in lookup will speed everything.
+# DONE: It does not, the loops are taking too long 15sec for 200 iterations
+# TODO: Fix the allocation part and include distances in the computations
+# Add that to decision environment "generate_possible_actions()"

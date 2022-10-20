@@ -32,6 +32,7 @@ class ActionType(Enum):
     OVERLOAD_TO_BROKEN = 'overload_to_broken'
     OVERLOAD_ALL = 'overload_all'
     NO_ACTION = 'no_action'
+    ROLLOUT = 'rollout'
 
 
 class LogType(Enum):

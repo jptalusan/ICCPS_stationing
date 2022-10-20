@@ -1,3 +1,4 @@
+from argparse import Action
 from Environment.EnvironmentModel import EnvironmentModel
 from Environment.enums import BusStatus, BusType, ActionType, LogType
 from src.utils import *
@@ -90,8 +91,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             valid_actions.extend(_valid_actions)
 
             # # Allocation
-            # _valid_actions = self.get_valid_allocations(state)
-            # valid_actions.extend(_valid_actions)
+            _valid_actions = self.get_valid_allocations(state)
+            valid_actions.extend(_valid_actions)
 
         elif action_type == ActionType.OVERLOAD_TO_BROKEN:
             _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
@@ -104,9 +105,18 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             valid_actions.extend(_valid_actions)
 
         elif action_type == ActionType.OVERLOAD_ALLOCATE:
-            # _valid_actions = self.get_valid_allocations(state)
-            # valid_actions.extend(_valid_actions)
+            _valid_actions = self.get_valid_allocations(state)
+            valid_actions.extend(_valid_actions)
             pass
+        
+        elif action_type == ActionType.ROLLOUT:
+            _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
+            _valid_actions = list(itertools.product(*_valid_actions))
+            valid_actions.extend(_valid_actions)
+
+            _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
+            _valid_actions = list(itertools.product(*_valid_actions))
+            valid_actions.extend(_valid_actions)
 
         # print("mdpEnv::Number of valid actions:", len(valid_actions))
         # print("mdpEnv::Valid actions:", valid_actions)
@@ -131,12 +141,17 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         if num_available_buses <= 0:
             return []
 
-        valid_stops = list(state.stops.keys())
-
+        # valid_stops = list(state.stops.keys())
+        # TODO: Add selection of valid stops
+        # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
+        valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
+        
+        # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
-                idle_overload_buses.append(bus_id)
+                if (bus_obj.current_stop not in valid_stops) or ('MCC' not in bus_obj.current_stop):
+                    idle_overload_buses.append(bus_id)
 
         valid_actions = []
         _valid_actions = [[ActionType.OVERLOAD_ALLOCATE], idle_overload_buses, valid_stops]
@@ -203,7 +218,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             current_block_trip = broken_bus_obj.current_block_trip
             stop_no            = broken_bus_obj.current_stop_number
 
-            ofb_obj.bus_block_trips = copy.copy([broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips)
+            # QUESTION: Should i copy.copy this?
+            ofb_obj.bus_block_trips = [broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips
             # Remove None, in case bus has not started trip.
             ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
 
@@ -217,7 +233,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
 
             # Switch passengers
-            ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
+            ofb_obj.current_load = broken_bus_obj.current_load
             ofb_obj.total_passengers_served = ofb_obj.current_load
 
             # Deactivate broken_bus_obj
@@ -284,6 +300,8 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         total_walk_aways = 0
         total_remaining = 0
         total_passenger_ons = 0
+        total_deadkms = 0
+        
         for _, stop_obj in state.stops.items():
             total_walk_aways += stop_obj.total_passenger_walk_away
             total_passenger_ons += stop_obj.total_passenger_ons
@@ -298,8 +316,13 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
                 for arrival_time, pw in route_pw.items():
                     remaining_passengers = pw['remaining']
                     total_remaining += remaining_passengers
+        
+        for _, bus_obj in state.buses.items():
+            total_deadkms += bus_obj.total_deadkms_moved
 
-        return (-1 * total_walk_aways)  + (-1 * total_remaining)  #+ total_passenger_ons
+        # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons
+        # return total_passenger_ons
+        return total_passenger_ons + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

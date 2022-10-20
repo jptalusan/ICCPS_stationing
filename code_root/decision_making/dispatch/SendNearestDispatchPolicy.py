@@ -38,6 +38,7 @@ class SendNearestDispatchPolicy:
                 broken_bus = info
                 next_stop = state.buses[info].current_stop
             elif action_type == ActionType.OVERLOAD_ALLOCATE:
+                next_stop = info
                 pass
             else:
                 raise "Action not supported"

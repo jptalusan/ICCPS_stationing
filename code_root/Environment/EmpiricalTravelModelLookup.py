@@ -1,7 +1,9 @@
 from src.utils import *
 import json
 import warnings
+import pickle
 import pandas as pd
+import datetime as dt
 from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
@@ -18,9 +20,6 @@ class EmpiricalTravelModelLookup:
         config_path = f'scenarios/baseline/data/{config.trip_plan}'
         with open(config_path) as f:
             self.trip_plan = dotdict(json.load(f))
-            
-        travel_time_path = 'scenarios/baseline/data/sampled_travel_times.pkl'
-        self.sampled_travel_time = pd.read_pickle(travel_time_path)
         
         distance_path = 'scenarios/baseline/data/gtfs_distance_pairs_km.pkl'
         self.sampled_distance = pd.read_pickle(distance_path)
@@ -30,14 +29,16 @@ class EmpiricalTravelModelLookup:
         
         self.logger = logger
 
-        lookup_path = 'scenarios/baseline/data/pair_tt_dd_stops.pkl'
-        self.lookup_tt_dd = pd.read_pickle(lookup_path)
+        with open('scenarios/baseline/data/stops_tt_dd_dict.pkl', 'rb') as handle:
+            self.lookup_tt_dd = pickle.load(handle)
+            
+        with open('scenarios/baseline/data/sampled_travel_times_dict.pkl', 'rb') as handle:
+            self.sampled_travel_time = pickle.load(handle)
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
         current_trip       = current_block_trip[1]
         IsWeekend          = 0 if _datetime.weekday() < 5 else 1
-        # time               = _datetime.time().strftime('%H:%M:%S')
         block_abbr         = int(current_block_trip[0])
         
         trip_data          = self.trip_plan[current_trip]
@@ -48,21 +49,15 @@ class EmpiricalTravelModelLookup:
         stop_id_original   = stop_id_original[current_stop_number]
         
         scheduled_time     = self.trip_plan[current_trip]['scheduled_time'][current_stop_number].split(" ")[1]
+        scheduled_time     = dt.datetime.strptime(scheduled_time, "%H:%M:%S").time()
+        # rid, bid, ssq, sid, tme, wkd
+        key = (route_id_dir, block_abbr, current_stop_number+1, stop_id_original, scheduled_time, IsWeekend)
         
-        # print(scheduled_time, route_id_dir, block_abbr, current_stop_number + 1, stop_id_original, IsWeekend)
-        tdf = self.sampled_travel_time[(self.sampled_travel_time['route_id_direction'] == route_id_dir) & \
-                                       (self.sampled_travel_time['block_abbr'] == block_abbr) & \
-                                       (self.sampled_travel_time['stop_sequence'] == current_stop_number + 1) & \
-                                       (self.sampled_travel_time['stop_id_original'] == stop_id_original) & \
-                                       (self.sampled_travel_time['IsWeekend'] == IsWeekend)]
-        tdf['time'] = pd.to_datetime(tdf['time'], format='%H:%M:%S')
+        if key in self.sampled_travel_time:
+            tt = self.sampled_travel_time[key]['sampled_travel_time']
+            return tt
         
-        tdf = tdf[tdf['time'] == f'1900-01-01 {scheduled_time}']
-        if not tdf.empty:
-            return tdf.iloc[0]['sampled_travel_time']
-        
-        # TODO: Handle when not available!
-        log(self.logger, _datetime, f'Failed to get travel time for: {scheduled_time},{route_id_dir},{block_abbr},{current_stop_number+1},{stop_id_original},{IsWeekend}', LogType.ERROR)
+        log(self.logger, _datetime, f'Failed to get travel time for: {key}', LogType.ERROR)
         return self.get_travel_time_from_depot(current_block_trip, stop_id_original, current_stop_number, _datetime)
     
     def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number, _datetime):
@@ -73,11 +68,15 @@ class EmpiricalTravelModelLookup:
         if (current_stop is not None) and (current_stop == next_stop):
             return 0
         
-        tt = self.lookup_tt_dd.query("current_stop == @current_stop and next_stop == @next_stop")
-        if not tt.empty:
-            return tt.iloc[0]['travel_time_s']
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            tt = self.lookup_tt_dd[key]['travel_time_s']
+            return tt
         else:
-            print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                tt = self.lookup_tt_dd[key]['travel_time_s']
+                return tt
             raise "Error getting Travel time"
     
     # tt is in seconds
@@ -85,13 +84,16 @@ class EmpiricalTravelModelLookup:
         if (current_stop is not None) and (current_stop == next_stop):
             return 0
         
-        tt = self.lookup_tt_dd.query("current_stop == @current_stop and next_stop == @next_stop")
-        if not tt.empty:
-            return tt.iloc[0]['travel_time_s']
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            tt = self.lookup_tt_dd[key]['travel_time_s']
+            return tt
         else:
-            print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                tt = self.lookup_tt_dd[key]['travel_time_s']
+                return tt
             raise "Error getting Travel time"
-            # return 100
     
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
@@ -99,18 +101,18 @@ class EmpiricalTravelModelLookup:
             if (current_stop == next_stop):
                 return 0
             
-            dd = self.lookup_tt_dd.query("current_stop == @current_stop and next_stop == @next_stop")
-            if not dd.empty:
-                return dd.iloc[0]['distance_m'] / 1000
+            key = (current_stop, next_stop)
+            if key in self.lookup_tt_dd:
+                dd = self.lookup_tt_dd[key]['distance_m']
+                return dd / 1000
             else:
-                dd = self.sampled_distance.query("stop_id == @current_stop and next_stop_id == @next_stop")
-                if not dd.empty:
-                    return dd.iloc[0]['shape_dist_traveled_km']
-                else:
-                    print(f"Distance cannot be computed for {current_stop} and {next_stop}")
-                    raise "Error getting distance"
-                    # return 1
+                key = (next_stop, current_stop)
+                if key in self.lookup_tt_dd:
+                    dd = self.lookup_tt_dd[key]['distance_m']
+                    return dd / 1000
+                raise "Error getting Travel time"
         else:
+            print(f"Current stop: {current_stop} and next_stop: {next_stop}.")
             raise "Error getting distance"
             # return -1
             
@@ -120,16 +122,15 @@ class EmpiricalTravelModelLookup:
             if (current_stop == next_stop):
                 return 0
             
-            dd = self.lookup_tt_dd.query("current_stop == @current_stop and next_stop == @next_stop")
-            if not dd.empty:
-                return dd.iloc[0]['distance_m'] / 1000
+            key = (current_stop, next_stop)
+            if key in self.lookup_tt_dd:
+                dd = self.lookup_tt_dd[key]['distance_m']
+                return dd / 1000
             else:
-                dd = self.sampled_distance.query("stop_id == @current_stop and next_stop_id == @next_stop")
-                if not dd.empty:
-                    return dd.iloc[0]['shape_dist_traveled_km']
-                else:
-                    print(f"Distance cannot be computed for {current_stop} and {next_stop}")
-                    raise "Error getting distance"
+                key = (next_stop, current_stop)
+                if key in self.lookup_tt_dd:
+                    dd = self.lookup_tt_dd[key]['distance_m']
+                    return dd / 1000
         else:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
             raise "Error getting distance"

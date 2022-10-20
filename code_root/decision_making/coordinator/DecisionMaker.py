@@ -87,7 +87,7 @@ class DecisionMaker:
 
         # print(f"DecisionMaker::event_processing_callback_funct({self.event_counter})")
         # log(self.logger, state.time, f"Event processing callback", LogType.DEBUG)
-
+        # state = copy.deepcopy(state)
         chosen_action = self.process_mcts(state)
 
         if chosen_action is None:
@@ -180,6 +180,7 @@ class DecisionMaker:
         inputs = []
 
         # Based on how many parallel mcts we want
+        # QUESTION: Copy? deepcopy? plain?
         for i in range(1):
             input_dict = {}
             input_dict['tree_number'] = i
@@ -189,7 +190,8 @@ class DecisionMaker:
             input_dict['iter_limit'] = iter_limit
             input_dict['exploit_explore_tradoff_param'] = uct_tradeoff
             input_dict['allowed_computation_time'] = allowed_computation_time
-            input_dict['rollout_policy'] = copy.deepcopy(rollout_policy)
+            input_dict['rollout_policy'] = rollout_policy
+            # input_dict['rollout_policy'] = copy.copy(rollout_policy)
             input_dict['event_queue'] = copy.deepcopy(event_queues[i])
             input_dict['current_state'] = copy.deepcopy(states[i])
             input_dict['logger'] = self.logger
@@ -198,6 +200,7 @@ class DecisionMaker:
         return inputs
 
     """
+    TODO: A LOT
     * Loading same one as real world environment
     * Issue, our events do not include the buses coming (arrival/travel time)
     * Retain remaining people on stops but sample new ones.
@@ -212,17 +215,17 @@ class DecisionMaker:
     """
     def load_events(self, state):
         events = copy.copy(state.events)
-
+        
+        if state.time.time() == dt.time(0, 0, 0):
+            start_time = events[0].time
+        else:
+            start_time = state.time
+            
         # Rollout lookahead_horizon
         if self.lookahead_horizon_delta_t:
-            lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
-            _events = [event for event in events if state.time <= event.time <= lookahead_horizon]
+            lookahead_horizon = start_time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
+            _events = [event for event in events if start_time <= event.time <= lookahead_horizon]
         else:
-            _events = [event for event in events if state.time <= event.time]
-        
-        # Preventing empty events
-        # if len(_events) == 0:
-        #     # print(f"No events in the MCTS event queue!")
-        #     _events = [events[0]]
-
+            _events = [event for event in events if start_time <= event.time]
+            
         return [_events]

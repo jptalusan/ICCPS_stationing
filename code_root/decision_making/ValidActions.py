@@ -88,6 +88,7 @@ class ValidActions:
             # No action
             valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
 
+        # [print(state.buses[_va['overload_bus']].current_stop, _va) for _va in valid_actions]
         return valid_actions
 
     def get_valid_allocations(self, state):
@@ -96,17 +97,19 @@ class ValidActions:
         if num_available_buses <= 0:
             return []
 
-        valid_stops = list(state.stops.keys())
-
+        # valid_stops = list(state.stops.keys())
+        valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
+        
+        # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
-                idle_overload_buses.append(bus_id)
+                if (bus_obj.current_stop not in valid_stops) or ('MCC' not in bus_obj.current_stop):
+                    idle_overload_buses.append(bus_id)
 
         valid_actions = []
         _valid_actions = [[ActionType.OVERLOAD_ALLOCATE], idle_overload_buses, valid_stops]
         _valid_actions = list(itertools.product(*_valid_actions))
         
-        # [print(_va) for _va in _valid_actions]
         valid_actions.extend(_valid_actions)
         return valid_actions

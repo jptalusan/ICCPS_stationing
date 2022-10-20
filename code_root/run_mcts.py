@@ -87,19 +87,17 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
-    # sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
-    sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_ons_offs.pkl')
+    with open('scenarios/baseline/data/sampled_ons_offs_dict.pkl', 'rb') as handle:
+        sampled_travel_time = pickle.load(handle)
 
     # Initial events
     # Includes: Trip starts, passenger sampling
     # all active stops that buses will pass
     events = []
-
-    # event_datetime = str_timestamp_to_datetime(f"{starting_date_str} 00:00:00")
-    # event = Event(event_type=EventType.CONGESTION_LEVEL_CHANGE, time=event_datetime)
-    # events.append(event)
-
-    stop_list = []
+    
+    event_datetime = str_timestamp_to_datetime(f"{starting_date_str} 00:00:00")
+    event = Event(event_type=EventType.CONGESTION_LEVEL_CHANGE, time=event_datetime)
+    events.append(event)
 
     # event_file = 'events_all_vehicles.pkl'
     event_file = 'events_2_vehicles.pkl'
@@ -135,29 +133,24 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                 stop_id_original = trip_plan[trip]['stop_id_original']
                 scheduled_time = [str_timestamp_to_datetime(st).strftime('%Y-%m-%d %H:%M:%S') for st in scheduled_time]
 
-                for i in range(len(scheduled_time)):
-                    load = sampled_loads.query(
-                        "route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[
-                        0]['sampled_loads']
-                    ons = sampled_loads.query(
-                        "route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[
-                        0]['ons']
-                    offs = sampled_loads.query(
-                        "route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[
-                        0]['offs']
-
-                    print(f"{block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
+                for stop_sequence in range(len(scheduled_time)):
+                    # sampled_travel_time['23_FROM DOWNTOWN', 2310, 32, 'DWMRT', pd.Timestamp('2021-08-23 05:41:00')]
+                    val = sampled_travel_time[route_id_dir, block, stop_sequence + 1, stop_id_original[stop_sequence], pd.Timestamp(scheduled_time[stop_sequence])]
+                    load = val['sampled_loads']
+                    ons = val['ons']
+                    offs = val['offs']
+                    print(f"{block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
 
                     pbar.set_description(
-                        f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
+                        f"Processing {block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
                     # making sure passengers arrives before the bus
-                    event_datetime = str_timestamp_to_datetime(f"{scheduled_time[i]}") - dt.timedelta(
+                    event_datetime = str_timestamp_to_datetime(f"{scheduled_time[stop_sequence]}") - dt.timedelta(
                         minutes=EARLY_PASSENGER_DELTA_MIN)
 
                     event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP,
                                   time=event_datetime,
                                   type_specific_information={'route_id_dir': route_id_dir,
-                                                             'stop_id': stop_id_original[i],
+                                                             'stop_id': stop_id_original[stop_sequence],
                                                              'load': load, 'ons': ons, 'offs': offs})
                     events.append(event)
 
@@ -165,12 +158,11 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                     event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
                                   time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
                                   type_specific_information={'route_id_dir': route_id_dir,
-                                                             'stop_id': stop_id_original[i],
+                                                             'stop_id': stop_id_original[stop_sequence],
                                                              'time': event_datetime})
                     events.append(event)
 
         events.sort(key=lambda x: x.time, reverse=False)
-        # [print(event) for event in events]
 
         with open(saved_events, "wb") as f:
             pickle.dump(events, f)
@@ -178,9 +170,8 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
         print("loading events...")
         with open(saved_events, "rb") as f:
             events = pickle.load(f)
-
+    
     return events
-
 
 def manually_insert_disruption(events, buses, bus_id, time):
     if bus_id not in list(buses.keys()):
@@ -201,9 +192,8 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 
 if __name__ == '__main__':
-    
     datetime_str = dt.datetime.strftime(dt.date.today(), DATETIME_FORMAT)
-    # sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
+    sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
     
     spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
     logger = spd.get('test')
@@ -270,19 +260,13 @@ if __name__ == '__main__':
     # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = 1.44
     pool_thread_count = 0
-    iter_limit = 20
+    iter_limit = 200
     allowed_computation_time = 15
     mcts_type = MCTSType.MODULAR_MCTS
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
                                                         dispatch_policy,
                                                         logger=mcts_logger)
-
-    """
-    coordinator
-        - callback
-            - multiprocessing
-        - MCTS
-    """
+    
     decision_maker = DecisionMaker(environment_model=sim_environment,
                                    travel_model=travel_model,
                                    dispatch_policy=None,
@@ -297,9 +281,6 @@ if __name__ == '__main__':
                                    lookahead_horizon_delta_t=lookahead_horizon_delta_t,
                                    allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
                                    )
-    
-    # dispatcher  = SendNearestDispatchPolicy(travel_model)
-    # decision_maker = RandomCoord(sim_environment, travel_model, dispatcher, logger)
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(passenger_events),
                           starting_state=starting_state,
@@ -310,5 +291,4 @@ if __name__ == '__main__':
 
     simulator.run_simulation()
 
-
-    # sys.stdout.close()
+    sys.stdout.close()

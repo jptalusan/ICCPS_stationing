@@ -82,20 +82,20 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
     # Load distributions
-    # sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_loads.pkl')
-    sampled_loads = pd.read_pickle('scenarios/baseline/data/sampled_ons_offs.pkl')
-    
+    with open('scenarios/baseline/data/sampled_ons_offs_dict.pkl', 'rb') as handle:
+        sampled_travel_time = pickle.load(handle)
+
     # Initial events
     # Includes: Trip starts, passenger sampling
     # all active stops that buses will pass
     events = []
-    
+
     stop_list = []
-    
+
     # event_file = 'events_all_vehicles.pkl'
     event_file = 'events_2_vehicles.pkl'
     saved_events = f'scenarios/baseline/data/{event_file}'
-    
+
     pbar = tqdm(Buses.items())
     if not os.path.exists(saved_events):
     # if True:
@@ -107,72 +107,65 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
             # Start trip (assuming trips are in sequential order)
             block = blocks_trips[0][0]
             trip = blocks_trips[0][1]
-            st   = trip_plan[trip]['scheduled_time']
+            st = trip_plan[trip]['scheduled_time']
             st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
             event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {st}")
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=event_datetime,
                           type_specific_information={'bus_id': bus_id})
             events.append(event)
-            
+
             # Populate stops
             for block_trip in blocks_trips:
                 block = int(block_trip[0])
                 trip = block_trip[1]
-                route_id         = trip_plan[trip]['route_id']
-                route_direction  = trip_plan[trip]['route_direction']
-                route_id_dir     = f"{route_id}_{route_direction}"
-                scheduled_time   = trip_plan[trip]['scheduled_time']
+                route_id = trip_plan[trip]['route_id']
+                route_direction = trip_plan[trip]['route_direction']
+                route_id_dir = f"{route_id}_{route_direction}"
+                scheduled_time = trip_plan[trip]['scheduled_time']
                 stop_id_original = trip_plan[trip]['stop_id_original']
                 scheduled_time = [str_timestamp_to_datetime(st).strftime('%Y-%m-%d %H:%M:%S') for st in scheduled_time]
-                
-                for i in range(len(scheduled_time)):
-                    load = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['sampled_loads']
-                    ons = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['ons']
-                    offs = sampled_loads.query("route_id_dir == @route_id_dir and block_abbr == @block and stop_id_original == @stop_id_original[@i] and scheduled_time == @scheduled_time[@i]").iloc[0]['offs']
-                    
-                    print(f"{block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
-                    
-                    pbar.set_description(f"Processing {block}, {stop_id_original[i]}, {scheduled_time[i]}, {route_id_dir}, {load}, {ons}, {offs}")
+
+                for stop_sequence in range(len(scheduled_time)):
+                    # sampled_travel_time['23_FROM DOWNTOWN', 2310, 32, 'DWMRT', pd.Timestamp('2021-08-23 05:41:00')]
+                    val = sampled_travel_time[route_id_dir, block, stop_sequence + 1, stop_id_original[stop_sequence], pd.Timestamp(scheduled_time[stop_sequence])]
+                    load = val['sampled_loads']
+                    ons = val['ons']
+                    offs = val['offs']
+                    # print(f"{block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
+
+                    # pbar.set_description(
+                    #     f"Processing {block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
                     # making sure passengers arrives before the bus
-                    event_datetime = str_timestamp_to_datetime(f"{scheduled_time[i]}") - dt.timedelta(minutes=EARLY_PASSENGER_DELTA_MIN)
-                    
-                    event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP, 
-                                time=event_datetime, 
-                                type_specific_information={'route_id_dir': route_id_dir,
-                                                           'stop_id': stop_id_original[i], 
-                                                           'load':load, 'ons':ons, 'offs':offs})
+                    event_datetime = str_timestamp_to_datetime(f"{scheduled_time[stop_sequence]}") - dt.timedelta(
+                        minutes=EARLY_PASSENGER_DELTA_MIN)
+
+                    event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP,
+                                  time=event_datetime,
+                                  type_specific_information={'route_id_dir': route_id_dir,
+                                                             'stop_id': stop_id_original[stop_sequence],
+                                                             'load': load, 'ons': ons, 'offs': offs})
                     events.append(event)
-                    
+
                     # people will leave after N minutes.
-                    event = Event(event_type=EventType.PASSENGER_LEAVE_STOP, 
-                                time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
-                                type_specific_information={'route_id_dir': route_id_dir,
-                                                           'stop_id': stop_id_original[i], 
-                                                           'time':event_datetime})
+                    event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
+                                  time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
+                                  type_specific_information={'route_id_dir': route_id_dir,
+                                                             'stop_id': stop_id_original[stop_sequence],
+                                                             'time': event_datetime})
                     events.append(event)
-                    
-                    # # probability that a bus breaks down
-                    # if np.random.uniform(0, 1) > 0.70 and not has_broken:
-                    #     has_broken = True
-                    #     print("BROKEN!")
-                    #     event = Event(event_type=EventType.VEHICLE_BREAKDOWN, 
-                    #                   time=event_datetime + dt.timedelta(minutes=np.random.randint(10, 20)),
-                    #                   type_specific_information={'bus_id': bus_id})
-                    #     events.append(event)
-        
+
         events.sort(key=lambda x: x.time, reverse=False)
         # [print(event) for event in events]
-        
+
         with open(saved_events, "wb") as f:
             pickle.dump(events, f)
     else:
         print("loading events...")
         with open(saved_events, "rb") as f:
             events = pickle.load(f)
-            
-    return events
 
+    return events
 
 def manually_insert_disruption(events, buses, bus_id, time):
     if bus_id not in list(buses.keys()):

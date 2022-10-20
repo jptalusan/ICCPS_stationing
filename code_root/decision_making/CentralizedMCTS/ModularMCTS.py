@@ -45,7 +45,8 @@ class ModularMCTS:
         self.solve_start_time = state.time
         self.number_of_nodes = 0
 
-        possible_actions, actions_taken_tracker = self.get_possible_actions(state, starting_event_queue[0])
+        possible_actions, actions_taken_tracker = self.get_possible_actions(state, 
+                                                                            starting_event_queue[0])
 
         _root_is_terminal = len(starting_event_queue[1:]) <= 0
 
@@ -285,7 +286,7 @@ class ModularMCTS:
         if num_unexplored_actions == 1:
             node.is_fully_expanded = True
 
-        # random.seed(100)
+        random.seed(100)
         action_index = random.choice(range(num_unexplored_actions))
         picked_action = unexplored_actions[action_index][0]
         node.actions_taken_tracker[unexplored_actions[action_index][1]] = (unexplored_actions[action_index][1], True)
