@@ -186,7 +186,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
-                          type_specific_information={'bus_id': ofb_id})
+                          type_specific_information={'bus_id': ofb_id,
+                                                     'action': ActionType.OVERLOAD_DISPATCH})
 
             new_events.append(event)
 
@@ -216,6 +217,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             else:
                 ofb_obj.current_stop_number = stop_no - 1
             ofb_obj.t_state_change = state.time
+            ofb_obj.status = BusStatus.IDLE
 
             # Switch passengers
             ofb_obj.current_load = broken_bus_obj.current_load
@@ -229,7 +231,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
-                          type_specific_information={'bus_id': ofb_id})
+                          type_specific_information={'bus_id': ofb_id,
+                                                     'action': ActionType.OVERLOAD_TO_BROKEN})
             new_events.append(event)
 
         # QUESTION: Does it make sense to reallocate while its not IDLE, then execute once free?
@@ -239,12 +242,23 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             action_info = action["info"]
             reallocation_stop = action_info
 
-            # TODO: Add a separate vehicle arrival event?
+            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop,
+                                                                              state.time)
+            distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
+                                                                                     state.time)
+
+            ofb_obj.current_stop = reallocation_stop
+            ofb_obj.t_state_change = state.time
+            ofb_obj.time_at_last_stop = state.time
+            ofb_obj.status = BusStatus.ALLOCATION
+            ofb_obj.distance_to_next_stop = distance_to_next_stop
+
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
                           type_specific_information={'bus_id': ofb_id,
                                                      'current_stop': current_stop,
-                                                     'reallocation_stop': reallocation_stop})
+                                                     'reallocation_stop': reallocation_stop,
+                                                     'action': ActionType.OVERLOAD_ALLOCATE})
             new_events.append(event)
 
         elif ActionType.NO_ACTION == action_type:
@@ -263,6 +277,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         total_remaining = 0
         total_passenger_ons = 0
         total_deadkms = 0
+        total_passengers_served = 0
         
         for _, stop_obj in state.stops.items():
             total_walk_aways += stop_obj.total_passenger_walk_away
@@ -281,10 +296,11 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         
         for _, bus_obj in state.buses.items():
             total_deadkms += bus_obj.total_deadkms_moved
+            total_passengers_served += bus_obj.total_passengers_served
 
         # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons
         # return total_passenger_ons
-        return total_passenger_ons + (-5 * total_deadkms) + (-1 * total_walk_aways * 0.5)
+        return total_passenger_ons + (-10 * total_deadkms) + total_passengers_served
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

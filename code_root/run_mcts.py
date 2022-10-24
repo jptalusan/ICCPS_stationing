@@ -153,13 +153,13 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
                                                              'load': load, 'ons': ons, 'offs': offs})
                     events.append(event)
 
-                    # people will leave after N minutes.
-                    event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
-                                  time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
-                                  type_specific_information={'route_id_dir': route_id_dir,
-                                                             'stop_id': stop_id_original[stop_sequence],
-                                                             'time': event_datetime})
-                    events.append(event)
+                    # # people will leave after N minutes.
+                    # event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
+                    #               time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
+                    #               type_specific_information={'route_id_dir': route_id_dir,
+                    #                                          'stop_id': stop_id_original[stop_sequence],
+                    #                                          'time': event_datetime})
+                    # events.append(event)
 
         events.sort(key=lambda x: x.time, reverse=False)
 

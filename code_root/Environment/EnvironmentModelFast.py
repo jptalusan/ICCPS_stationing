@@ -101,6 +101,17 @@ class EnvironmentModelFast:
             bus_state = state.buses[bus_id].status
             bus_type = state.buses[bus_id].type
 
+            action = additional_info.get('action')
+
+            # HACK: When i set the status of overload bus as ALLOCATION in take action, things fail
+            # Possible solution: just handle all inside the IDLE state below. see if ALLOC or BROKEN
+            if action == ActionType.OVERLOAD_TO_BROKEN:
+                state.buses[bus_id].status = BusStatus.IDLE
+                bus_state = BusStatus.IDLE
+            if action == ActionType.OVERLOAD_ALLOCATE:
+                state.buses[bus_id].status = BusStatus.ALLOCATION
+                bus_state = BusStatus.ALLOCATION
+
             if BusStatus.IDLE == bus_state:
                 if len(state.buses[bus_id].bus_block_trips) > 0:
                     time_of_activation = state.buses[bus_id].t_state_change
@@ -148,6 +159,7 @@ class EnvironmentModelFast:
                 ofb_obj = state.buses[bus_id]
                 current_stop = additional_info['current_stop']
                 reallocation_stop = additional_info['reallocation_stop']
+                time_of_activation = state.buses[bus_id].t_state_change
 
                 travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop,
                                                                                   reallocation_stop,
@@ -156,7 +168,7 @@ class EnvironmentModelFast:
                 distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop,
                                                                                          reallocation_stop,
                                                                                          state.time)
-                time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
+                time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
                 ofb_obj.t_state_change = time_to_state_change
                 ofb_obj.status = BusStatus.ALLOCATION
                 ofb_obj.time_at_last_stop = state.time
@@ -372,7 +384,8 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
-                          type_specific_information={'bus_id': ofb_id})
+                          type_specific_information={'bus_id': ofb_id,
+                                                     'action': ActionType.OVERLOAD_DISPATCH})
 
             new_events.append(event)
 
@@ -407,6 +420,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 ofb_obj.current_stop_number = stop_no - 1
 
             ofb_obj.t_state_change = state.time
+            ofb_obj.status = BusStatus.IDLE
 
             # Switch passengers
             ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
@@ -420,7 +434,8 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
-                          type_specific_information={'bus_id': ofb_id})
+                          type_specific_information={'bus_id': ofb_id,
+                                                     'action': ActionType.OVERLOAD_TO_BROKEN})
             new_events.append(event)
 
             log(self.logger, state.time,
@@ -428,7 +443,6 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 LogType.ERROR)
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
-            # print(f"Random Coord: {action}")
             ofb_obj = state.buses[ofb_id]
             current_stop = ofb_obj.current_stop
             action_info = action["info"]
@@ -441,15 +455,16 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = state.time
-            ofb_obj.status = BusStatus.ALLOCATION
             ofb_obj.time_at_last_stop = state.time
+            ofb_obj.status = BusStatus.ALLOCATION
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
                           type_specific_information={'bus_id': ofb_id,
                                                      'current_stop': current_stop,
-                                                     'reallocation_stop': reallocation_stop})
+                                                     'reallocation_stop': reallocation_stop,
+                                                     'action': ActionType.OVERLOAD_ALLOCATE})
             new_events.append(event)
             # new_events = self.dispatch_policy.
             log(self.logger, state.time,

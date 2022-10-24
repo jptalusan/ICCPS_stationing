@@ -89,10 +89,10 @@ class DecisionMaker:
     # Call the MCTS in parallel here
 
     def event_processing_callback_funct(self, actions, state):
-        self.event_counter += 1
 
         # Only do something when buses are available?
         if self.any_available_overload_buses(state):
+            self.event_counter += 1
             chosen_action = self.process_mcts(state)
 
             if chosen_action is None:

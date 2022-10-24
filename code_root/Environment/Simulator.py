@@ -57,7 +57,8 @@ class Simulator:
         # HACK: I get into an infinite loop of reallocations
         last_actionable_event_time = [ev.time
                                       for ev in self.event_queue
-                                      if ev.event_type == EventType.PASSENGER_ARRIVE_STOP][-1] + pd.Timedelta(hours=1)
+                                      if ev.event_type == EventType.PASSENGER_ARRIVE_STOP][-1] + \
+                                     dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
         # initialize state
         while len(self.event_queue) > 0:
             self.update_sim_info()
