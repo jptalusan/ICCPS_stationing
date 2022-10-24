@@ -250,13 +250,13 @@ if __name__ == '__main__':
     passenger_events = load_events(event_file, starting_date_str, Buses, Stops, trip_plan)
 
     # HACK:
-    # passenger_events = manually_insert_disruption(passenger_events,
-    #                                               buses=Buses,
-    #                                               bus_id='129',
-    #                                               # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
-    #                                               time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
+    passenger_events = manually_insert_disruption(passenger_events,
+                                                  buses=Buses,
+                                                  bus_id='129',
+                                                  # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
+                                                  time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
 
-    starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=starting_datetime))
+    starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=passenger_events[0].time))
 
     mcts_discount_factor = 0.99997
     # mcts_discount_factor = 1

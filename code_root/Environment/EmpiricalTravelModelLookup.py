@@ -78,7 +78,7 @@ class EmpiricalTravelModelLookup:
                 tt = self.lookup_tt_dd[key]['travel_time_s']
         if tt < 0:
             # raise "Error getting Travel time"
-            return 100
+            return 30
         return tt
     
     # tt is in seconds
@@ -96,7 +96,7 @@ class EmpiricalTravelModelLookup:
                 tt = self.lookup_tt_dd[key]['travel_time_s']
         if tt < 0:
             # raise "Error getting Travel time"
-            return 100
+            return 30
         return tt
     
     # dd is in meters
@@ -115,7 +115,7 @@ class EmpiricalTravelModelLookup:
                     dd = self.lookup_tt_dd[key]['distance_m']
             if dd < 0:
                 # raise "Error getting distance"
-                return 1
+                return 0.5
             return dd / 1000
         else:
             print(f"Current stop: {current_stop} and next_stop: {next_stop}.")
@@ -139,7 +139,7 @@ class EmpiricalTravelModelLookup:
                     dd = self.lookup_tt_dd[key]['distance_m']
             if dd < 0:
                 # raise "Error getting distance"
-                return 1
+                return 0.5
             return dd / 1000
         else:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
@@ -230,7 +230,7 @@ class EmpiricalTravelModelLookup:
         if (tt < 0) or (dd < 0):
             # print(f"TT DD cannot be computed for {current_stop} and {next_stop}")
             # raise "Error getting TT and DD"
-            return 100, 1
+            return 30, 0.5
         else:
             return tt, dd / 1000
             

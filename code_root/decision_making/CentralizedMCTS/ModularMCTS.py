@@ -127,7 +127,7 @@ class ModularMCTS:
         best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
         actions_with_scores = self.get_scored_child_actions(root)
 
-        print(f"MCTS action with scores: {actions_with_scores}")
+        # print(f"MCTS action with scores: {actions_with_scores}")
 
         # TODO: Something cannot be pickled, leading to recursion error:
         # https://stackoverflow.com/questions/52021254/maximum-recursion-depth-exceeded-multiprocessing-and-bs4

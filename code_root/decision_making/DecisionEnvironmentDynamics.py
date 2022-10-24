@@ -1,4 +1,6 @@
 from argparse import Action
+
+import pandas as pd
 from Environment.EnvironmentModel import EnvironmentModel
 from Environment.enums import BusStatus, BusType, ActionType, LogType
 from Environment.EnvironmentModelFast import EnvironmentModelFast
@@ -108,16 +110,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         elif action_type == ActionType.OVERLOAD_ALLOCATE:
             _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
-            pass
-        
-        elif action_type == ActionType.ROLLOUT:
-            _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
-            _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
-
-            _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
-            _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
 
         # print("mdpEnv::Number of valid actions:", len(valid_actions))
         # print("mdpEnv::Valid actions:", valid_actions)
@@ -151,17 +143,17 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
-                if bus_obj.current_stop in valid_stops:
-                    continue
-                if 'MCC' in bus_obj.current_stop:
-                    continue
-                
-                if (bus_obj.current_stop not in valid_stops) or ('MCC' not in bus_obj.current_stop):
-                    idle_overload_buses.append(bus_id)
+                # if bus_obj.current_stop in valid_stops:
+                #     continue
+                # if bus_obj.current_stop not in valid_stops:
+                idle_overload_buses.append(bus_id)
 
         valid_actions = []
         _valid_actions = [[ActionType.OVERLOAD_ALLOCATE], idle_overload_buses, valid_stops]
         _valid_actions = list(itertools.product(*_valid_actions))
+
+        # Remove allocations to the same stop the bus is currently in.
+        _valid_actions = [va for va in _valid_actions if va[2] != state.buses[va[1]].current_stop]
         valid_actions.extend(_valid_actions)
         return valid_actions
 
@@ -185,13 +177,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             remaining          = action_info[3]
             current_block_trip = action_info[4]
 
-            # if current_block_trip in self.trips_already_covered:
-            #     return []
-
-            # log(self.logger,
-            #     state.time,
-            #     f"Taking MCTS action: {action}, .",
-            #     LogType.INFO)
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
 
             ofb_obj.bus_block_trips = [current_block_trip]
@@ -213,12 +198,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             action_info   = action["info"]
             broken_bus_id = action_info
 
-            # if broken_bus_id in self.served_buses:
-            #     return []
-
-            # log(self.logger, state.time,
-            #     f"Taking MCTS action: {action}, .",
-            #     LogType.INFO)
             broken_bus_obj = state.buses[broken_bus_id]
 
             current_block_trip = broken_bus_obj.current_block_trip
@@ -253,44 +232,20 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                           type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
 
-            # self.served_buses.append(broken_bus_id)
-            # log(self.logger, state.time,
-            #     f"Sending takeover overflow bus: {ofb_id} from {ofb_obj.current_stop} @ stop {broken_bus_obj.current_stop}",
-            #     LogType.ERROR)
-
+        # QUESTION: Does it make sense to reallocate while its not IDLE, then execute once free?
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
-            # print(f"Random Coord: {action}")
             ofb_obj = state.buses[ofb_id]
             current_stop = ofb_obj.current_stop
             action_info = action["info"]
             reallocation_stop = action_info
 
-            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop,
-                                                                              reallocation_stop,
-                                                                              state.time)
-
-            distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop,
-                                                                                     reallocation_stop,
-                                                                                     state.time)
-
-            ofb_obj.current_stop = reallocation_stop
-            ofb_obj.t_state_change = state.time
-            ofb_obj.status = BusStatus.ALLOCATION
-            ofb_obj.time_at_last_stop = state.time
-            ofb_obj.distance_to_next_stop = distance_to_next_stop
-
             # TODO: Add a separate vehicle arrival event?
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
-                          type_specific_information={'bus_id': ofb_id})
+                          type_specific_information={'bus_id': ofb_id,
+                                                     'current_stop': current_stop,
+                                                     'reallocation_stop': reallocation_stop})
             new_events.append(event)
-            # new_events = self.dispatch_policy.
-            # log(self.logger, state.time,
-            #     f"Reallocating overflow bus: {ofb_id} from {current_stop} to {reallocation_stop}",
-            #     LogType.INFO)
-            
-            # QUESTION: Not sure here
-            # return 0, new_events, state.time
 
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
@@ -329,7 +284,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
         # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons
         # return total_passenger_ons
-        return total_passenger_ons + (-10 * total_deadkms)
+        return total_passenger_ons + (-5 * total_deadkms) + (-1 * total_walk_aways * 0.5)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

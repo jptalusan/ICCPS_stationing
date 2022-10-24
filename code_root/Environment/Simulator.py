@@ -1,6 +1,8 @@
 import copy
 import time
-from Environment.enums import BusStatus, BusType
+
+import pandas as pd
+from Environment.enums import BusStatus, BusType, EventType
 from src.utils import *
 import datetime as dt
 import spdlog as spd
@@ -51,7 +53,11 @@ class Simulator:
         log(self.logger, dt.datetime.now(), "Running simulation (real world time)", LogType.INFO)
         
         self.start_sim_time = time.time()
-        
+
+        # HACK: I get into an infinite loop of reallocations
+        last_actionable_event_time = [ev.time
+                                      for ev in self.event_queue
+                                      if ev.event_type == EventType.PASSENGER_ARRIVE_STOP][-1] + pd.Timedelta(hours=1)
         # initialize state
         while len(self.event_queue) > 0:
             self.update_sim_info()
@@ -81,6 +87,11 @@ class Simulator:
                 self.add_event(event)
 
             self.state.events = copy.copy(self.event_queue)
+
+            if len(self.event_queue) > 0:
+                if self.event_queue[0].time >= last_actionable_event_time:
+                    if self.event_queue[0].event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
+                        break
 
             # self.save_visualization(update_event.time, granularity_s=None)
             

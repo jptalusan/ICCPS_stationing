@@ -92,10 +92,10 @@ class EnvironmentModel:
             ofb_obj.bus_block_trips = [current_block_trip]
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
+            ofb_obj.t_state_change = state.time
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
 
             new_events.append(event)
@@ -129,7 +129,7 @@ class EnvironmentModel:
             else:
                 ofb_obj.current_stop_number = stop_no - 1
                 
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
+            ofb_obj.t_state_change = state.time
 
             # Switch passengers
             ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
@@ -142,7 +142,7 @@ class EnvironmentModel:
             broken_bus_obj.bus_block_trips = []
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
 
@@ -167,7 +167,7 @@ class EnvironmentModel:
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
             # new_events = self.dispatch_policy.

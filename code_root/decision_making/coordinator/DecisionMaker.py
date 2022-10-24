@@ -5,7 +5,7 @@ import numpy as np
 import datetime as dt
 from multiprocessing import Pool
 from Environment.DataStructures.Event import Event
-from Environment.enums import LogType, EventType
+from Environment.enums import LogType, EventType, BusStatus, BusType
 from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 
@@ -91,14 +91,26 @@ class DecisionMaker:
     def event_processing_callback_funct(self, actions, state):
         self.event_counter += 1
 
-        chosen_action = self.process_mcts(state)
+        # Only do something when buses are available?
+        if self.any_available_overload_buses(state):
+            chosen_action = self.process_mcts(state)
 
-        if chosen_action is None:
-            return None
-        return chosen_action
+            if chosen_action is None:
+                return None
+            return chosen_action
+        return None
+
+    # HACK: Try and see if there are any overload buses IDLE, only then you do something.
+    def any_available_overload_buses(self, state):
+        num_available_buses = len(
+            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+        return num_available_buses > 0
 
     def process_mcts(self, state):
+        # EVENT CHAINS
         event_queues = self.get_event_chains(state)
+
+        # ORACLE
         # event_queues = self.load_events(state)
         if len(event_queues[0]) <= 0:
             print("No event available...")
