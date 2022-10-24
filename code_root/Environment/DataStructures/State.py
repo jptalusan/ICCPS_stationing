@@ -4,12 +4,9 @@ class State:
                  stops,
                  buses,
                  time,
-                 events=[],
-                 active_incidents=[]):
+                 events=[]):
         
         self.stops = stops
         self.buses = buses
         self.events = events
         self.time = time
-        
-        self.active_incidents = active_incidents

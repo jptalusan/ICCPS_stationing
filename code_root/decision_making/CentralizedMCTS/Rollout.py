@@ -179,7 +179,11 @@ class BareMinimumRollout:
             # HACK: Not sure if this is correct
             if passenger_waiting is None:
                 return []
+            
+            if curr_route_id_dir not in passenger_waiting:
+                return []
 
+            # TODO: Sometimes end stop's information is consumed by the next trip's start stop (which share the same stop)
             if time_key in passenger_waiting[curr_route_id_dir]:
                 remaining = passenger_waiting[curr_route_id_dir][time_key]['remaining']
                 got_on_bus = passenger_waiting[curr_route_id_dir][time_key]['got_on_bus']
@@ -240,10 +244,11 @@ class BareMinimumRollout:
             elif BusStatus.BROKEN == bus_state:
                 pass
             
-            # TODO: Not sure here.
+            # TODO: Handle when the reallocation bus is going to be IDLE
             elif BusStatus.ALLOCATION == bus_state:
                 distance_to_next_stop = state.buses[bus_id].distance_to_next_stop
                 state.buses[bus_id].total_deadkms_moved += distance_to_next_stop
+                state.buses[bus_id].status = BusStatus.IDLE
 
         # TODO: Could probably add the distance here and see if its deadmiles based on status ALLOCATION and type OVERLOAD
         # TODO: The issue now i think is that the bus arrives earlier than the people arrive at the stop so no data is entered.
@@ -254,7 +259,7 @@ class BareMinimumRollout:
             bus_state = state.buses[bus_id].status
 
             if BusStatus.IDLE == bus_state:
-                raise "Should not have an IDLE bus arriving at a stop."
+                # raise "Should not have an IDLE bus arriving at a stop."
                 pass
 
             elif BusStatus.IN_TRANSIT == bus_state:
@@ -343,8 +348,10 @@ class BareMinimumRollout:
                 sampled_ons = sampled_data['ons']
                 sampled_offs = sampled_data['offs']
 
+                # QUESTION: I think this needs to be += and not just = in case ons is non-zero.
                 if remaining > 0:
-                    sampled_ons = remaining
+                    sampled_ons += remaining
+                    # sampled_ons = remaining
 
                 ons += sampled_ons
                 offs += sampled_offs
@@ -388,6 +395,7 @@ class BareMinimumRollout:
 
         return True
 
+    # HACK: Put back the "raises" and update tt_dd dict before actual.
     ############# LOOK UP ################
     def get_scheduled_arrival_time(self, current_block_trip, current_stop_sequence):
         current_trip = current_block_trip[1]
@@ -416,6 +424,7 @@ class BareMinimumRollout:
         return str(route_id) + "_" + route_direction
 
     def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number):
+        tt = -1
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
@@ -437,44 +446,54 @@ class BareMinimumRollout:
             if key in self.lookup_tt_dd:
                 tt = self.lookup_tt_dd[key]['travel_time_s']
                 return tt
-            print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
-            raise "Error getting Travel time"
+            # print(f"Travel time cannot be computed for {current_stop} and {next_stop}")
+
+        if tt < 0:
+            # raise "Error getting Travel time"
+            return 100
+        return tt
 
     def get_distance_from_depot(self, current_block_trip, current_stop, current_stop_number):
+        dd = -1
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
-
+        
         if (current_stop is not None) and (current_stop == next_stop):
             return 0
         
         key = (current_stop, next_stop)
         if key in self.lookup_tt_dd:
             dd = self.lookup_tt_dd[key]['distance_m']
-            return dd / 1000
         else:
             key = (next_stop, current_stop)
             if key in self.lookup_tt_dd:
-                dotdict = self.lookup_tt_dd[key]['distance_m']
-                return dd / 1000
+                dd = self.lookup_tt_dd[key]['distance_m']
+            
+        if dd < 0:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
-            raise "Error getting Distance"
+            # raise "Error getting Distance"
+            return 1
+        return dd / 1000
         
     def get_stop_to_stop_distance(self, current_stop, next_stop):
+        dd = -1
+        
         if (current_stop is not None) and (current_stop == next_stop):
             return 0
         
         key = (current_stop, next_stop)
         if key in self.lookup_tt_dd:
             dd = self.lookup_tt_dd[key]['distance_m']
-            return dd / 1000
         else:
             key = (next_stop, current_stop)
             if key in self.lookup_tt_dd:
-                dotdict = self.lookup_tt_dd[key]['distance_m']
-                return dd / 1000
+                dd = self.lookup_tt_dd[key]['distance_m']
+        if dd < 0:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
-            raise "Error getting Distance"
+            # raise "Error getting Distance"
+            return 1
+        return dd / 1000
         
 # TODO: Add the distances, see if just changing the pandas to dicts in lookup will speed everything.
 # DONE: It does not, the loops are taking too long 15sec for 200 iterations

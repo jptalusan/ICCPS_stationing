@@ -2,6 +2,7 @@ import copy
 import math
 import random
 import time
+import dill
 from decision_making.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType
@@ -15,8 +16,8 @@ class ModularMCTS:
                  rollout_policy,
                  iter_limit,
                  allowed_computation_time,
-                 logger,
-                 exploit_explore_tradoff_param
+                 exploit_explore_tradoff_param,
+                 logger=None,
                  ):
         self.allowed_computation_time = allowed_computation_time
         self.rollout_policy = rollout_policy
@@ -128,6 +129,12 @@ class ModularMCTS:
 
         print(f"MCTS action with scores: {actions_with_scores}")
 
+        # TODO: Something cannot be pickled, leading to recursion error:
+        # https://stackoverflow.com/questions/52021254/maximum-recursion-depth-exceeded-multiprocessing-and-bs4
+        # https://stackoverflow.com/questions/22233478/how-to-check-which-detail-of-a-complex-object-cannot-be-pickled
+        # dill.detect.trace(True)
+        # _f = dill.dumps(root)
+        
         return {'scored_actions': actions_with_scores,
                 'number_nodes': self.number_of_nodes,
                 'time_taken': self.time_tracker,

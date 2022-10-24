@@ -15,6 +15,7 @@ from Environment.DataStructures.Stop import Stop
 from Environment.EmpiricalTravelModelLookup import EmpiricalTravelModelLookup
 from Environment.enums import BusStatus, BusType, EventType, MCTSType
 from Environment.EnvironmentModel import EnvironmentModel
+from Environment.EnvironmentModelFast import EnvironmentModelFast
 from Environment.Simulator import Simulator
 from src.utils import *
 from tqdm import tqdm
@@ -80,7 +81,7 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
     return Buses, Stops
 
 
-def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
+def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=100):
     print("Adding events...")
     np.random.seed(random_seed)
     has_broken = False
@@ -93,13 +94,6 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
     # Includes: Trip starts, passenger sampling
     # all active stops that buses will pass
     events = []
-    
-    event_datetime = str_timestamp_to_datetime(f"{starting_date_str} 00:00:00")
-    event = Event(event_type=EventType.CONGESTION_LEVEL_CHANGE, time=event_datetime)
-    events.append(event)
-
-    # event_file = 'events_all_vehicles.pkl'
-    event_file = 'events_2_vehicles.pkl'
     saved_events = f'scenarios/baseline/data/{event_file}'
 
     pbar = tqdm(Buses.items())
@@ -134,7 +128,11 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
 
                 for stop_sequence in range(len(scheduled_time)):
                     # sampled_travel_time['23_FROM DOWNTOWN', 2310, 32, 'DWMRT', pd.Timestamp('2021-08-23 05:41:00')]
-                    val = sampled_travel_time[route_id_dir, block, stop_sequence + 1, stop_id_original[stop_sequence], pd.Timestamp(scheduled_time[stop_sequence])]
+                    val = sampled_travel_time[route_id_dir,
+                                              block,
+                                              stop_sequence + 1,
+                                              stop_id_original[stop_sequence],
+                                              pd.Timestamp(scheduled_time[stop_sequence])]
                     load = val['sampled_loads']
                     ons = val['ons']
                     offs = val['offs']
@@ -149,6 +147,8 @@ def load_events(starting_date, Buses, Stops, trip_plan, random_seed=100):
                     event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP,
                                   time=event_datetime,
                                   type_specific_information={'route_id_dir': route_id_dir,
+                                                             'block_abbr': block,
+                                                             'stop_sequence': stop_sequence + 1,
                                                              'stop_id': stop_id_original[stop_sequence],
                                                              'load': load, 'ons': ons, 'offs': offs})
                     events.append(event)
@@ -192,41 +192,45 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 if __name__ == '__main__':
     datetime_str = dt.datetime.strftime(dt.date.today(), DATETIME_FORMAT)
-    sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
+    # sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
     
     spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
     logger = spd.get('test')
     logger.set_pattern("[%l] %v")
+    # logger = None
 
-    spd.FileLogger(name='MCTS', filename=f'logs/MCTS_{datetime_str}.log', truncate=True)
-    mcts_logger = spd.get('MCTS')
-    mcts_logger.set_pattern("[%l] %v")
+    # spd.FileLogger(name='MCTS', filename=f'logs/MCTS_{datetime_str}.log', truncate=True)
+    # mcts_logger = spd.get('MCTS')
+    # mcts_logger.set_pattern("[%l] %v")
+    mcts_logger = None
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log_level', type=str, default='DEBUG')
     args = parser.parse_args()
-    args = dotdict(namespace_to_dict(args))
-    if args.log_level == 'INFO':
+    args = namespace_to_dict(args)
+    if args["log_level"] == 'INFO':
         logger.set_level(spd.LogLevel.INFO)
-    elif args.log_level == 'DEBUG':
+    elif args["log_level"] == 'DEBUG':
         logger.set_level(spd.LogLevel.DEBUG)
-    elif args.log_level == 'ERROR':
+    elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
 
-    config_path = 'scenarios/baseline/data/config.json'
+    config_name = "config_2.json"
+    config_path = f'scenarios/baseline/data/{config_name}'
     with open(config_path) as f:
-        config = dotdict(json.load(f))
+        config = json.load(f)
 
-    config_path = f'scenarios/baseline/data/{config.trip_plan}'
+    config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
     with open(config_path) as f:
-        trip_plan = dotdict(json.load(f))
+        trip_plan = json.load(f)
 
-    config_path = f'scenarios/baseline/data/{config.vehicle_plan}'
+    config_path = f'scenarios/baseline/data/{config["vehicle_plan"]}'
     with open(config_path) as f:
-        bus_plan = dotdict(json.load(f))
+        bus_plan = json.load(f)
 
-    travel_model = EmpiricalTravelModelLookup(logger)
-    sim_environment = EnvironmentModel(travel_model, logger)
+    travel_model = EmpiricalTravelModelLookup(config_name, logger=None)
+    # sim_environment = EnvironmentModel(travel_model, logger)
+    sim_environment = EnvironmentModelFast(travel_model, logger)
 
     # TODO: Switch dispatch policies with NearestDispatch
     dispatch_policy = RandomDispatch(travel_model)
@@ -234,21 +238,23 @@ if __name__ == '__main__':
     # TODO: Move to environment model once i know it works
     valid_actions = None
 
-    starting_date_str = '2021-08-23'
+    event_file = config["event_file"]
+    
+    starting_date_str = config["schedule_date"]
     starting_date = dt.datetime.strptime(starting_date_str, '%Y-%m-%d')
     starting_time = dt.time(0, 0, 0)
     starting_datetime = dt.datetime.combine(starting_date, starting_time)
 
     Buses, Stops = load_initial_state(bus_plan, trip_plan)
 
-    passenger_events = load_events(starting_date_str, Buses, Stops, trip_plan)
+    passenger_events = load_events(event_file, starting_date_str, Buses, Stops, trip_plan)
 
     # HACK:
-    passenger_events = manually_insert_disruption(passenger_events,
-                                                  buses=Buses,
-                                                  bus_id='129',
-                                                  # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
-                                                  time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
+    # passenger_events = manually_insert_disruption(passenger_events,
+    #                                               buses=Buses,
+    #                                               bus_id='129',
+    #                                               # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
+    #                                               time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
 
     starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=starting_datetime))
 
@@ -264,12 +270,14 @@ if __name__ == '__main__':
     mcts_type = MCTSType.MODULAR_MCTS
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
                                                         dispatch_policy,
-                                                        logger=mcts_logger)
+                                                        logger=None)
+    
+    event_chain_dir = config["event_chain_dir"]
     
     decision_maker = DecisionMaker(environment_model=sim_environment,
                                    travel_model=travel_model,
                                    dispatch_policy=None,
-                                   logger=mcts_logger,
+                                   logger=None,
                                    pool_thread_count=pool_thread_count,
                                    mcts_type=mcts_type,
                                    discount_factor=mcts_discount_factor,
@@ -278,7 +286,8 @@ if __name__ == '__main__':
                                    uct_tradeoff=uct_tradeoff,
                                    iter_limit=iter_limit,
                                    lookahead_horizon_delta_t=lookahead_horizon_delta_t,
-                                   allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
+                                   allowed_computation_time=allowed_computation_time,  # 5 seconds per thread,
+                                   event_chain_dir=event_chain_dir
                                    )
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(passenger_events),
@@ -290,4 +299,4 @@ if __name__ == '__main__':
 
     simulator.run_simulation()
 
-    sys.stdout.close()
+    # sys.stdout.close()

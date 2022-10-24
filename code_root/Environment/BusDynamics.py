@@ -17,7 +17,7 @@ class BusDynamics:
     def update_bus(self, curr_event, bus_id, _new_time, full_state):
         """
         In this function, a responder's state will be updated to the given time. The responder can pass through
-        multiple status changes during this update
+        multiple status changes during Ethis update
         :param curr_event:
         :param bus_id:
         :param _new_time: current event's time
@@ -188,7 +188,6 @@ class BusDynamics:
             current_block_trip = full_state.buses[bus_id].current_block_trip
             bus_block_trips = full_state.buses[bus_id].bus_block_trips
             current_stop_number = full_state.buses[bus_id].current_stop_number
-            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
             current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
             last_stop_number = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
 

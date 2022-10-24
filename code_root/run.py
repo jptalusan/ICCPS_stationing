@@ -194,25 +194,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log_level', type=str, default='DEBUG')
     args = parser.parse_args()
-    args = dotdict(namespace_to_dict(args))
-    if args.log_level == 'INFO':
+    args = namespace_to_dict(args)
+    if args["log_level"] == 'INFO':
         logger.set_level(spd.LogLevel.INFO)
-    elif args.log_level == 'DEBUG':
+    elif args["log_level"] == 'DEBUG':
         logger.set_level(spd.LogLevel.DEBUG)
-    elif args.log_level == 'ERROR':
+    elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
-        
+
     config_path = 'scenarios/baseline/data/config.json'
     with open(config_path) as f:
-        config = dotdict(json.load(f))
-        
-    config_path = f'scenarios/baseline/data/{config.trip_plan}'
+        config = json.load(f)
+
+    config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
     with open(config_path) as f:
-        trip_plan = dotdict(json.load(f))
-        
-    config_path = f'scenarios/baseline/data/{config.vehicle_plan}'
+        trip_plan = json.load(f)
+
+    config_path = f'scenarios/baseline/data/{config["vehicle_plan"]}'
     with open(config_path) as f:
-        bus_plan = dotdict(json.load(f))
+        bus_plan = json.load(f)
         
     travel_model = EmpiricalTravelModelLookup(logger)
     sim_environment = EnvironmentModel(travel_model, logger)

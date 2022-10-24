@@ -104,6 +104,9 @@ class ValidActions:
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
+                if bus_obj.current_stop in valid_stops:
+                    continue
+                
                 if (bus_obj.current_stop not in valid_stops) or ('MCC' not in bus_obj.current_stop):
                     idle_overload_buses.append(bus_id)
 

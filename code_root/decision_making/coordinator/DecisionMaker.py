@@ -1,8 +1,11 @@
 import copy
-import datetime as dt
-
+import pickle
+import time
 import numpy as np
-from Environment.enums import LogType
+import datetime as dt
+from multiprocessing import Pool
+from Environment.DataStructures.Event import Event
+from Environment.enums import LogType, EventType
 from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 
@@ -39,7 +42,7 @@ def run_low_level_mcts(arg_dict):
                          iter_limit=arg_dict['iter_limit'],
                          allowed_computation_time=arg_dict['allowed_computation_time'],
                          rollout_policy=arg_dict['rollout_policy'],
-                         logger=arg_dict['logger'],
+                        #  logger=arg_dict['logger'],
                          exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'])
 
     res = solver.solve(arg_dict['current_state'], arg_dict['event_queue'])
@@ -63,31 +66,31 @@ class DecisionMaker:
                  uct_tradeoff,
                  iter_limit,
                  lookahead_horizon_delta_t,
-                 allowed_computation_time):
-        self.environment_model         = environment_model
-        self.travel_model              = travel_model
-        self.dispatch_policy           = dispatch_policy
-        self.logger                    = logger
-        self.event_counter             = 0
-        self.pool_thread_count         = pool_thread_count
-        self.mcts_type                 = mcts_type
+                 allowed_computation_time,
+                 event_chain_dir):
+        self.environment_model = environment_model
+        self.travel_model = travel_model
+        self.dispatch_policy = dispatch_policy
+        self.logger = logger
+        self.event_counter = 0
+        self.pool_thread_count = pool_thread_count
+        self.mcts_type = mcts_type
 
-        self.discount_factor           = discount_factor
-        self.mdp_environment_model     = mdp_environment_model
-        self.rollout_policy            = rollout_policy
-        self.uct_tradeoff              = uct_tradeoff
-        self.iter_limit                = iter_limit
+        self.discount_factor = discount_factor
+        self.mdp_environment_model = mdp_environment_model
+        self.rollout_policy = rollout_policy
+        self.uct_tradeoff = uct_tradeoff
+        self.iter_limit = iter_limit
         self.allowed_computation_time  = allowed_computation_time
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
+        
+        self.event_chain_dir = event_chain_dir
 
     # Call the MCTS in parallel here
 
     def event_processing_callback_funct(self, actions, state):
         self.event_counter += 1
 
-        # print(f"DecisionMaker::event_processing_callback_funct({self.event_counter})")
-        # log(self.logger, state.time, f"Event processing callback", LogType.DEBUG)
-        # state = copy.deepcopy(state)
         chosen_action = self.process_mcts(state)
 
         if chosen_action is None:
@@ -95,8 +98,8 @@ class DecisionMaker:
         return chosen_action
 
     def process_mcts(self, state):
-        # event_queues = self.get_event_chains(state)
-        event_queues = self.load_events(state)
+        event_queues = self.get_event_chains(state)
+        # event_queues = self.load_events(state)
         if len(event_queues[0]) <= 0:
             print("No event available...")
             # raise "No event available. should not happen?"
@@ -153,19 +156,63 @@ class DecisionMaker:
             for region_id, action_dict in best_actions.items():
                 for resp_id, action_id in action_dict.items():
                     final_action[resp_id] = action_id
+        
+        #TODO: Add root parallelization here
+        else:
 
+            start_pool_time = time.time()
+            with Pool(processes=self.pool_thread_count) as pool:
+
+                pool_creation_time = time.time() - start_pool_time
+
+                inputs = self.get_mcts_inputs(states=states,
+                                              event_queues=event_queues,
+                                              discount_factor=self.discount_factor,
+                                              mdp_environment_model=self.mdp_environment_model,
+                                              rollout_policy=self.rollout_policy,
+                                              uct_tradeoff=self.uct_tradeoff,
+                                              iter_limit=self.iter_limit,
+                                              allowed_computation_time=self.allowed_computation_time,
+                                              mcts_type=self.mcts_type)
+
+                # run_start_ = time.time()
+                res_dict = pool.map(run_low_level_mcts, inputs)
+
+            best_actions = dict()
+
+            for i in range(len(res_dict)):
+                results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
+                actions = [_['action'] for _ in results[0]['scored_actions']]
+
+                all_action_scores = []
+                for action in actions:
+                    action_scores = []
+                    for result in results:
+                        action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
+                        action_scores.append(action_score['score'])
+
+                    all_action_scores.append({'action': action, 'scores': action_scores})
+
+                avg_action_scores = list()
+                for res in all_action_scores:
+                    avg_action_scores.append({'action': res['action'],
+                                              'avg_score': np.mean(res['scores'])})
+
+                # We want the actions which result in the least passengers left behind
+                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
+
+            # print(f"DecisionMaker scores:{avg_action_scores}")
+
+            for region_id, action_dict in best_actions.items():
+                for resp_id, action_id in action_dict.items():
+                    final_action[resp_id] = action_id
+                
         print(f"Event counter: {self.event_counter}")
         print(f"DecisionMaker res_dict:{res_dict[0]}")
         print(f"DecisionMaker final action:{final_action}")
         print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
         print()
-        log(self.logger, states[0].time, f"MCTS Decision: {final_action}")
         return final_action
-
-    # Different number of people going to the stops
-    # Question: Should travel time be part of the chains too?
-    def get_event_chains(self, state):
-        return [state.events]
 
     def get_mcts_inputs(self,
                         states,
@@ -191,10 +238,9 @@ class DecisionMaker:
             input_dict['exploit_explore_tradoff_param'] = uct_tradeoff
             input_dict['allowed_computation_time'] = allowed_computation_time
             input_dict['rollout_policy'] = rollout_policy
-            # input_dict['rollout_policy'] = copy.copy(rollout_policy)
             input_dict['event_queue'] = copy.deepcopy(event_queues[i])
             input_dict['current_state'] = copy.deepcopy(states[i])
-            input_dict['logger'] = self.logger
+            # input_dict['logger'] = self.logger
             inputs.append(input_dict)
 
         return inputs
@@ -228,4 +274,49 @@ class DecisionMaker:
         else:
             _events = [event for event in events if start_time <= event.time]
             
+        # if len(_events) <= 0:
+        #     _events = events[0]
+            
         return [_events]
+
+    # Generate processed chains using generate_chains_pickles.ipynb
+    def get_event_chains(self, state, chain_count=1):
+        chain_dir = f'scenarios/baseline/chains/{self.event_chain_dir}'
+        event_chains = []
+        state_events = copy.copy(state.events)
+        
+        for chain in range(chain_count):
+            fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}_processed.pkl'
+            with open(fp, 'rb') as handle:
+                sampled_ons_offs_dict = pickle.load(handle)
+                
+            original = [pe for pe 
+                        in state_events 
+                        if (pe.event_type != EventType.PASSENGER_ARRIVE_STOP) 
+                        and (pe.event_type != EventType.PASSENGER_LEAVE_STOP)]
+            
+            chain = [pe for pe 
+                     in sampled_ons_offs_dict 
+                     if (pe.event_type == EventType.PASSENGER_ARRIVE_STOP) 
+                     or (pe.event_type == EventType.PASSENGER_LEAVE_STOP)]
+            new_chain = original + chain
+            new_chain.sort(key=lambda x: x.time, reverse=False)
+
+            if state.time.time() == dt.time(0, 0, 0):
+                start_time = new_chain[0].time
+            else:
+                start_time = state.time
+                
+            # Rollout lookahead_horizon
+            if self.lookahead_horizon_delta_t:
+                lookahead_horizon = start_time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
+                _events = [event for event in new_chain if start_time <= event.time <= lookahead_horizon]
+            else:
+                _events = [event for event in new_chain if start_time <= event.time]
+                
+            # if len(_events) <= 0:
+            #     _events = new_chain[0]
+                
+            event_chains.append(_events)
+            
+        return event_chains

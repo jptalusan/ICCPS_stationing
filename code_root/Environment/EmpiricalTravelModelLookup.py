@@ -9,17 +9,18 @@ from pandas.core.common import SettingWithCopyWarning
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
+# TODO: I'll fix the travel time and distance once the new dataset has been generated
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
-    def __init__(self, logger):
-        config_path = 'scenarios/baseline/data/config.json'
+    def __init__(self, config_name, logger):
+        config_path = f'scenarios/baseline/data/{config_name}'
         with open(config_path) as f:
-            config = dotdict(json.load(f))
+            config = json.load(f)
 
-        config_path = f'scenarios/baseline/data/{config.trip_plan}'
+        config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
         with open(config_path) as f:
-            self.trip_plan = dotdict(json.load(f))
+            self.trip_plan = json.load(f)
         
         distance_path = 'scenarios/baseline/data/gtfs_distance_pairs_km.pkl'
         self.sampled_distance = pd.read_pickle(distance_path)
@@ -57,7 +58,7 @@ class EmpiricalTravelModelLookup:
             tt = self.sampled_travel_time[key]['sampled_travel_time']
             return tt
         
-        log(self.logger, _datetime, f'Failed to get travel time for: {key}', LogType.ERROR)
+        # log(self.logger, _datetime, f'Failed to get travel time for: {key}', LogType.ERROR)
         return self.get_travel_time_from_depot(current_block_trip, stop_id_original, current_stop_number, _datetime)
     
     def get_travel_time_from_depot(self, current_block_trip, current_stop, current_stop_number, _datetime):
@@ -71,54 +72,60 @@ class EmpiricalTravelModelLookup:
         key = (current_stop, next_stop)
         if key in self.lookup_tt_dd:
             tt = self.lookup_tt_dd[key]['travel_time_s']
-            return tt
         else:
             key = (next_stop, current_stop)
             if key in self.lookup_tt_dd:
                 tt = self.lookup_tt_dd[key]['travel_time_s']
-                return tt
-            raise "Error getting Travel time"
+        if tt < 0:
+            # raise "Error getting Travel time"
+            return 100
+        return tt
     
     # tt is in seconds
     def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
+        tt = -1
         if (current_stop is not None) and (current_stop == next_stop):
             return 0
         
         key = (current_stop, next_stop)
         if key in self.lookup_tt_dd:
             tt = self.lookup_tt_dd[key]['travel_time_s']
-            return tt
         else:
             key = (next_stop, current_stop)
             if key in self.lookup_tt_dd:
                 tt = self.lookup_tt_dd[key]['travel_time_s']
-                return tt
-            raise "Error getting Travel time"
+        if tt < 0:
+            # raise "Error getting Travel time"
+            return 100
+        return tt
     
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
         if current_stop and next_stop:
+            dd = -1
             if (current_stop == next_stop):
                 return 0
             
             key = (current_stop, next_stop)
             if key in self.lookup_tt_dd:
                 dd = self.lookup_tt_dd[key]['distance_m']
-                return dd / 1000
             else:
                 key = (next_stop, current_stop)
                 if key in self.lookup_tt_dd:
                     dd = self.lookup_tt_dd[key]['distance_m']
-                    return dd / 1000
-                raise "Error getting Travel time"
+            if dd < 0:
+                # raise "Error getting distance"
+                return 1
+            return dd / 1000
         else:
             print(f"Current stop: {current_stop} and next_stop: {next_stop}.")
             raise "Error getting distance"
-            # return -1
+            # return 1
             
     # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
     def get_distance(self, current_stop, next_stop, _datetime):
         if current_stop and next_stop:
+            dd = -1
             if (current_stop == next_stop):
                 return 0
             
@@ -130,11 +137,14 @@ class EmpiricalTravelModelLookup:
                 key = (next_stop, current_stop)
                 if key in self.lookup_tt_dd:
                     dd = self.lookup_tt_dd[key]['distance_m']
-                    return dd / 1000
+            if dd < 0:
+                # raise "Error getting distance"
+                return 1
+            return dd / 1000
         else:
             print(f"Distance cannot be computed for {current_stop} and {next_stop}")
             raise "Error getting distance"
-            # return -1
+            # return 1
     
     # Can probably move to a different file next time
     def get_next_stop(self, current_block_trip, current_stop_sequence):
@@ -185,12 +195,43 @@ class EmpiricalTravelModelLookup:
     def get_route_id_dir_for_trip(self, current_block_trip):
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
-        route_id           = trip_data['route_id']
-        route_direction    = trip_data['route_direction']
+        route_id = trip_data['route_id']
+        route_direction = trip_data['route_direction']
         return str(route_id) + "_" + route_direction
         
     def get_last_stop_number_on_trip(self, current_block_trip):
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
         return trip_data['last_stop_sequence']
+        
+    def get_traveltime_distance_from_depot(self, current_block_trip, current_stop, current_stop_number):
+        dd = -1
+        tt = -1
+        current_trip = current_block_trip[1]
+        trip_data = self.trip_plan[current_trip]
+        next_stop = trip_data['stop_id_original'][current_stop_number]
+        
+        if (current_stop is not None) and (current_stop == next_stop):
+            return 0, 0
+        
+        key = (current_stop, next_stop)
+        if key in self.lookup_tt_dd:
+            tt = self.lookup_tt_dd[key]['travel_time_s']
+            dd = self.lookup_tt_dd[key]['distance_m']
+            # return tt, dd / 1000
+        else:
+            key = (next_stop, current_stop)
+            if key in self.lookup_tt_dd:
+                tt = self.lookup_tt_dd[key]['travel_time_s']
+                dd = self.lookup_tt_dd[key]['distance_m']
+                # return tt, dd / 1000
+            # return 100, 1
+            
+        if (tt < 0) or (dd < 0):
+            # print(f"TT DD cannot be computed for {current_stop} and {next_stop}")
+            # raise "Error getting TT and DD"
+            return 100, 1
+        else:
+            return tt, dd / 1000
+            
         

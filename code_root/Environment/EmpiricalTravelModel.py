@@ -15,11 +15,11 @@ class EmpiricalTravelModel:
     def __init__(self, logger):
         config_path = 'scenarios/baseline/data/config.json'
         with open(config_path) as f:
-            config = dotdict(json.load(f))
+            config = json.load(f)
 
-        config_path = f'scenarios/baseline/data/{config.trip_plan}'
+        config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
         with open(config_path) as f:
-            self.trip_plan = dotdict(json.load(f))
+            self.trip_plan = json.load(f)
             
         travel_time_path = 'scenarios/baseline/data/sampled_travel_times.pkl'
         self.sampled_travel_time = pd.read_pickle(travel_time_path)

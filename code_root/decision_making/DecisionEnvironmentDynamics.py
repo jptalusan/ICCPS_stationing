@@ -1,6 +1,7 @@
 from argparse import Action
 from Environment.EnvironmentModel import EnvironmentModel
 from Environment.enums import BusStatus, BusType, ActionType, LogType
+from Environment.EnvironmentModelFast import EnvironmentModelFast
 from src.utils import *
 from Environment.DataStructures.Event import Event
 from Environment.enums import EventType
@@ -11,10 +12,10 @@ import datetime as dt
 # Should have get possible actions function
 
 
-class DecisionEnvironmentDynamics(EnvironmentModel):
+class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
     def __init__(self, travel_model, send_nearest_dispatch, reward_policy=None, logger=None):
-        EnvironmentModel.__init__(self, travel_model=travel_model, logger=logger)
+        EnvironmentModelFast.__init__(self, travel_model=travel_model, logger=logger)
         self.send_nearest_dispatch = send_nearest_dispatch
         self.reward_policy         = reward_policy
         self.travel_model          = travel_model
@@ -90,7 +91,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             _valid_actions = list(itertools.product(*_valid_actions))
             valid_actions.extend(_valid_actions)
 
-            # # Allocation
+            # Allocation
             _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
 
@@ -150,6 +151,11 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
+                if bus_obj.current_stop in valid_stops:
+                    continue
+                if 'MCC' in bus_obj.current_stop:
+                    continue
+                
                 if (bus_obj.current_stop not in valid_stops) or ('MCC' not in bus_obj.current_stop):
                     idle_overload_buses.append(bus_id)
 
@@ -191,10 +197,10 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             ofb_obj.bus_block_trips = [current_block_trip]
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
+            ofb_obj.t_state_change = state.time
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
 
             new_events.append(event)
@@ -230,7 +236,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             # Because at this point we already set the state to the next stop.
             else:
                 ofb_obj.current_stop_number = stop_no - 1
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=1)
+            ofb_obj.t_state_change = state.time
 
             # Switch passengers
             ofb_obj.current_load = broken_bus_obj.current_load
@@ -243,7 +249,7 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
             broken_bus_obj.bus_block_trips = []
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
 
@@ -268,13 +274,14 @@ class DecisionEnvironmentDynamics(EnvironmentModel):
                                                                                      state.time)
 
             ofb_obj.current_stop = reallocation_stop
-            ofb_obj.t_state_change = state.time + dt.timedelta(seconds=travel_time)
+            ofb_obj.t_state_change = state.time
             ofb_obj.status = BusStatus.ALLOCATION
             ofb_obj.time_at_last_stop = state.time
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
+            # TODO: Add a separate vehicle arrival event?
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time + dt.timedelta(seconds=1),
+                          time=state.time,
                           type_specific_information={'bus_id': ofb_id})
             new_events.append(event)
             # new_events = self.dispatch_policy.
