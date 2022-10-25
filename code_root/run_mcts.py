@@ -153,14 +153,6 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
                                                              'load': load, 'ons': ons, 'offs': offs})
                     events.append(event)
 
-                    # # people will leave after N minutes.
-                    # event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
-                    #               time=event_datetime + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE),
-                    #               type_specific_information={'route_id_dir': route_id_dir,
-                    #                                          'stop_id': stop_id_original[stop_sequence],
-                    #                                          'time': event_datetime})
-                    # events.append(event)
-
         events.sort(key=lambda x: x.time, reverse=False)
 
         with open(saved_events, "wb") as f:
@@ -215,7 +207,7 @@ if __name__ == '__main__':
     elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
 
-    config_name = "config_2.json"
+    config_name = "config_10.json"
     config_path = f'scenarios/baseline/data/{config_name}'
     with open(config_path) as f:
         config = json.load(f)
@@ -250,11 +242,20 @@ if __name__ == '__main__':
     passenger_events = load_events(event_file, starting_date_str, Buses, Stops, trip_plan)
 
     # HACK:
+    # Removing leave events
+    passenger_events = [pe for pe in passenger_events if pe.event_type != EventType.PASSENGER_LEAVE_STOP]
+    # Injecting incident
     passenger_events = manually_insert_disruption(passenger_events,
                                                   buses=Buses,
                                                   bus_id='129',
                                                   # time=str_timestamp_to_datetime('2021-08-23 16:15:00'))
                                                   time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
+    # Add one last event to ensure everyone leaves
+    event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
+                  time=passenger_events[-1].time + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE))
+    passenger_events.append(event)
+    passenger_events.sort(key=lambda x: x.time, reverse=False)
+    # END HACK
 
     starting_state = copy.deepcopy(State(Stops, Buses, events=passenger_events, time=passenger_events[0].time))
 

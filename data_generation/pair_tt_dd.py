@@ -103,7 +103,12 @@ if __name__ == '__main__':
     # Creating a dictionary
     df['key_pair'] = list(zip(df.current_stop, df.next_stop))
     df = df.set_index('key_pair')
+    df = df.drop_duplicates(subset=['current_node', 'next_node', 'current_stop', 'next_stop'])
     stops_tt_dd_dict = df.drop(['current_node', 'next_node', 'current_stop', 'next_stop'], axis=1).to_dict('index')
     with open('results/stops_tt_dd_dict.pkl', 'wb') as handle:
         pickle.dump(stops_tt_dd_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        
+    # with open('results/stops_tt_dd_dict.pkl', 'rb') as handle:
+    #     stops_tt_dd_dict = pickle.load(handle)
     # print(stops_tt_dd_dict)

@@ -220,9 +220,14 @@ class DecisionMaker:
                     final_action[resp_id] = action_id
                 
         print(f"Event counter: {self.event_counter}")
-        print(f"DecisionMaker res_dict:{res_dict[0]}")
-        print(f"DecisionMaker final action:{final_action}")
         print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+        # print(f"DecisionMaker res_dict:{res_dict[0]}")
+        sorted_actions = res_dict[0]['mcts_res']['scored_actions']
+        sorted_actions.sort(key=lambda _: _['score'], reverse=True)
+        [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        time_taken = res_dict[0]['mcts_res']['time_taken']
+        print(f"time_taken:{time_taken}")
+        # print(f"DecisionMaker final action:{final_action}")
         print()
         return final_action
 
@@ -301,17 +306,20 @@ class DecisionMaker:
             fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}_processed.pkl'
             with open(fp, 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
-                
+
+            # Keep VEHICLE_START_TRIP and PASSENGER LEAVING (which happens at the end only)
+            # Remove VEHICLE_BREAKDOWN and PASSENGER_ARRIVE_STOP to substitute it below
             original = [pe for pe 
                         in state_events 
-                        if (pe.event_type != EventType.PASSENGER_ARRIVE_STOP) 
-                        and (pe.event_type != EventType.PASSENGER_LEAVE_STOP)]
-            
+                        if (pe.event_type != EventType.PASSENGER_ARRIVE_STOP)
+                        and (pe.event_type != EventType.VEHICLE_BREAKDOWN)]
+
+            # SUBSTITUTE only PASSENGER_ARRIVE_STOP
             chain = [pe for pe 
                      in sampled_ons_offs_dict 
-                     if (pe.event_type == EventType.PASSENGER_ARRIVE_STOP) 
-                     or (pe.event_type == EventType.PASSENGER_LEAVE_STOP)]
+                     if (pe.event_type == EventType.PASSENGER_ARRIVE_STOP)]
             new_chain = original + chain
+
             new_chain.sort(key=lambda x: x.time, reverse=False)
 
             if state.time.time() == dt.time(0, 0, 0):

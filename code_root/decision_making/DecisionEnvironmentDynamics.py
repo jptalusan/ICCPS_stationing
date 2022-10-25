@@ -228,6 +228,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             broken_bus_obj.current_load = 0
             broken_bus_obj.current_block_trip = None
             broken_bus_obj.bus_block_trips = []
+            broken_bus_obj.total_passengers_served -= ofb_obj.current_load
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
@@ -278,7 +279,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         total_passenger_ons = 0
         total_deadkms = 0
         total_passengers_served = 0
-        
+        total_aggregate_delay = 0
+
         for _, stop_obj in state.stops.items():
             total_walk_aways += stop_obj.total_passenger_walk_away
             total_passenger_ons += stop_obj.total_passenger_ons
@@ -297,10 +299,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         for _, bus_obj in state.buses.items():
             total_deadkms += bus_obj.total_deadkms_moved
             total_passengers_served += bus_obj.total_passengers_served
+            total_aggregate_delay += bus_obj.delay_time
 
-        # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons
+        # return (-2 * total_walk_aways) + (-2 * total_remaining) + total_passenger_ons
+        return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons + (-40 * total_deadkms) + (-5 * total_aggregate_delay)
         # return total_passenger_ons
-        return total_passenger_ons + (-10 * total_deadkms) + total_passengers_served
+        # return total_passenger_ons + (-10 * total_deadkms) + total_passengers_served
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):
