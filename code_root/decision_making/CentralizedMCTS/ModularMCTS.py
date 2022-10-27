@@ -8,6 +8,7 @@ from Environment.DataStructures.State import State
 from Environment.enums import ActionType
 
 
+## TODO: Remove the state.event in the MCTS.
 class ModularMCTS:
 
     def __init__(self,

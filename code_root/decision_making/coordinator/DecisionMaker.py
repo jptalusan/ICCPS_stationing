@@ -301,6 +301,7 @@ class DecisionMaker:
         chain_dir = f'scenarios/baseline/chains/{self.event_chain_dir}'
         event_chains = []
         state_events = copy.copy(state.events)
+        # state_events = copy.deepcopy(state.events)
         
         for chain in range(chain_count):
             fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}_processed.pkl'

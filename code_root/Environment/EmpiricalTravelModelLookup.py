@@ -21,23 +21,20 @@ class EmpiricalTravelModelLookup:
         config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
-        
-        distance_path = 'scenarios/baseline/data/gtfs_distance_pairs_km.pkl'
-        self.sampled_distance = pd.read_pickle(distance_path)
-        
+
         disruption_path = 'scenarios/baseline/data/disruption_probabilities.pkl'
         self.sampled_disruption = pd.read_pickle(disruption_path)
         
         self.logger = logger
 
-        with open('scenarios/baseline/data/stops_tt_dd_dict.pkl', 'rb') as handle:
-            self.lookup_tt_dd = pickle.load(handle)
-            
         with open('scenarios/baseline/data/sampled_travel_times_dict.pkl', 'rb') as handle:
             self.sampled_travel_time = pickle.load(handle)
+
+        with open('scenarios/baseline/data/stops_tt_dd_node_dict.pkl', 'rb') as handle:
+            self.stops_tt_dd_dict = pickle.load(handle)
             
-        with open('scenarios/baseline/data/matching_stop_names_dict.pkl', 'rb') as handle:
-            self.matching_stop_names_dict = pickle.load(handle)
+        with open('scenarios/baseline/data/stops_node_matching_dict.pkl', 'rb') as handle:
+            self.stop_nodes_dict = pickle.load(handle)
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
@@ -69,96 +66,19 @@ class EmpiricalTravelModelLookup:
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
 
-        if (current_stop is not None) and (current_stop == next_stop):
-            return 0
-            
-        if current_stop in self.matching_stop_names_dict:
-            current_stop = self.matching_stop_names_dict[current_stop]['current_stop']
-        if next_stop in self.matching_stop_names_dict:
-            next_stop = self.matching_stop_names_dict[next_stop]['current_stop']
-        
-        key = (current_stop, next_stop)
-        if key in self.lookup_tt_dd:
-            tt = self.lookup_tt_dd[key]['travel_time_s']
-        else:
-            key = (next_stop, current_stop)
-            if key in self.lookup_tt_dd:
-                tt = self.lookup_tt_dd[key]['travel_time_s']
-        if tt < 0:
-            # raise "Error getting Travel time"
-            return 30
+        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop)
         return tt
     
-    # # tt is in seconds
-    # def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-    #     tt = -1
-    #     if (current_stop is not None) and (current_stop == next_stop):
-    #         return 0
-        
-    #     key = (current_stop, next_stop)
-    #     if key in self.lookup_tt_dd:
-    #         tt = self.lookup_tt_dd[key]['travel_time_s']
-    #     else:
-    #         key = (next_stop, current_stop)
-    #         if key in self.lookup_tt_dd:
-    #             tt = self.lookup_tt_dd[key]['travel_time_s']
-    #     if tt < 0:
-    #         # raise "Error getting Travel time"
-    #         return 30
-    #     return tt
+    # tt is in seconds
+    def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
+        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        return tt
     
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-        if current_stop and next_stop:
-            dd = -1
-            if (current_stop == next_stop):
-                return 0
-            
-            if current_stop in self.matching_stop_names_dict:
-                current_stop = self.matching_stop_names_dict[current_stop]['current_stop']
-            if next_stop in self.matching_stop_names_dict:
-                next_stop = self.matching_stop_names_dict[next_stop]['current_stop']
-            
-            key = (current_stop, next_stop)
-            if key in self.lookup_tt_dd:
-                dd = self.lookup_tt_dd[key]['distance_m']
-            else:
-                key = (next_stop, current_stop)
-                if key in self.lookup_tt_dd:
-                    dd = self.lookup_tt_dd[key]['distance_m']
-            if dd < 0:
-                raise "Error getting distance"
-                # return 0.5
-            return dd / 1000
-        else:
-            print(f"Current stop: {current_stop} and next_stop: {next_stop}.")
-            raise "Error getting distance"
-            # return 1
-            
-    # # pandas dataframe: stop_id, next_stop_id, shape_dist_traveled_km
-    # def get_distance(self, current_stop, next_stop, _datetime):
-    #     if current_stop and next_stop:
-    #         dd = -1
-    #         if (current_stop == next_stop):
-    #             return 0
-            
-    #         key = (current_stop, next_stop)
-    #         if key in self.lookup_tt_dd:
-    #             dd = self.lookup_tt_dd[key]['distance_m']
-    #             return dd / 1000
-    #         else:
-    #             key = (next_stop, current_stop)
-    #             if key in self.lookup_tt_dd:
-    #                 dd = self.lookup_tt_dd[key]['distance_m']
-    #         if dd < 0:
-    #             raise "Error getting distance"
-    #             # return 0.5
-    #         return dd / 1000
-    #     else:
-    #         print(f"Distance cannot be computed for {current_stop} and {next_stop}")
-    #         raise "Error getting distance"
-    #         # return 1
-    
+        _, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        return dd
+
     # Can probably move to a different file next time
     def get_next_stop(self, current_block_trip, current_stop_sequence):
         '''
@@ -224,33 +144,20 @@ class EmpiricalTravelModelLookup:
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
         
-        if (current_stop is not None) and (current_stop == next_stop):
-            return 0, 0
-        
-        # # HACK: some stops are not distinguishable in OSM
-        if current_stop in self.matching_stop_names_dict:
-            current_stop = self.matching_stop_names_dict[current_stop]['current_stop']
-        if next_stop in self.matching_stop_names_dict:
-            next_stop = self.matching_stop_names_dict[next_stop]['current_stop']
-        
-        key = (current_stop, next_stop)
-        if key in self.lookup_tt_dd:
-            tt = self.lookup_tt_dd[key]['travel_time_s']
-            dd = self.lookup_tt_dd[key]['distance_m']
-            # return tt, dd / 1000
+        tt, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        return tt, dd
+    
+    def get_traveltime_distance_from_stops(self, current_stop, next_stop):
+        cn = self.stop_nodes_dict[current_stop]['nearest_node']
+        nn = self.stop_nodes_dict[next_stop]['nearest_node']
+
+        tt = self.stops_tt_dd_dict[(cn, nn)]['travel_time_s']
+        if tt < 0:
+            tt = self.stops_tt_dd_dict[(nn, cn)]['travel_time_s']
+            dd = self.stops_tt_dd_dict[(nn, cn)]['distance_m']
         else:
-            key = (next_stop, current_stop)
-            if key in self.lookup_tt_dd:
-                tt = self.lookup_tt_dd[key]['travel_time_s']
-                dd = self.lookup_tt_dd[key]['distance_m']
-                # return tt, dd / 1000
-            # return 100, 1
-            
-        if (tt < 0) or (dd < 0):
-            print(f"TT DD cannot be computed for {current_stop} and {next_stop}")
-            raise "Error getting TT and DD"
-            # return 30, 0.5
-        else:
-            return tt, dd / 1000
-            
+            dd = self.stops_tt_dd_dict[(cn, nn)]['distance_m']
         
+        if tt < 0:
+            raise f"Could not find tt/dd for {cn} to {nn}."
+        return tt, dd / 1000

@@ -207,7 +207,7 @@ if __name__ == '__main__':
     elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
 
-    config_name = "config_10.json"
+    config_name = "config_2.json"
     config_path = f'scenarios/baseline/data/{config_name}'
     with open(config_path) as f:
         config = json.load(f)
