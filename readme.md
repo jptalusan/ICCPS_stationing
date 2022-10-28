@@ -54,3 +54,5 @@ Could not find tt/dd for 202314951/EDG9AWN to 202256411/EDGPEDWF.
 Could not find tt/dd for 202256411/EDGPEDWF to 202314983/EDG12AWN.
 Could not find tt/dd for 202314951/EDG9AWN to 202256411/EDGPEDWF.
 Could not find tt/dd for 202256411/EDGPEDWF to 202314983/EDG12AWN.
+
+issue: buses arriving very late and still picking up passengers

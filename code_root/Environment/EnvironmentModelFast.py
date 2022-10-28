@@ -205,7 +205,7 @@ class EnvironmentModelFast:
                 state.buses[bus_id].total_deadkms_moved += distance_to_next_stop
                 state.buses[bus_id].status = BusStatus.IDLE
                 log(self.logger, new_time, f"Reallocated Bus {bus_id} to {state.buses[bus_id].current_stop}")
-                log(self.logger, new_time, f"Bus {bus_id} deadkms: {state.buses[bus_id].total_deadkms_moved}")
+                log(self.logger, new_time, f"Bus {bus_id} deadkms: {state.buses[bus_id].total_deadkms_moved:.2f}")
 
             elif BusStatus.BROKEN == bus_state:
                 pass
@@ -318,14 +318,23 @@ class EnvironmentModelFast:
                 sampled_ons = 0
                 sampled_offs = 0
                 remaining = 0
-                if (passenger_arrival_time >= (bus_arrival_time - dt.timedelta(PASSENGER_TIME_TO_LEAVE))) & \
-                    (passenger_arrival_time <= bus_arrival_time):
+                if bus_arrival_time - passenger_arrival_time <= dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE):
                     remaining = sampled_data['remaining']
                     sampled_ons = sampled_data['ons']
                     sampled_offs = sampled_data['offs']
+
+                    # QUESTION: I think this needs to be += and not just = in case ons is non-zero.
+                    if remaining > 0:
+                        # sampled_ons += remaining
+                        sampled_ons = remaining
+
+                    ons += sampled_ons
+                    offs += sampled_offs
+
+                    picked_up_list.append(passenger_arrival_time)
                     
                 # Substitute for the leaving events
-                elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(PASSENGER_TIME_TO_LEAVE)):
+                elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)):
                     sampled_ons = 0
                     sampled_offs = 0
                     remaining = sampled_data.get("remaining", 0)
@@ -337,17 +346,13 @@ class EnvironmentModelFast:
                     else:
                         walk_aways = remaining
                     stop_object.total_passenger_walk_away += walk_aways
-                    for_deletion.append(route_id_dir, passenger_arrival_time)
-
-                # QUESTION: I think this needs to be += and not just = in case ons is non-zero.
-                if remaining > 0:
-                    # sampled_ons += remaining
-                    sampled_ons = remaining
-
-                ons += sampled_ons
-                offs += sampled_offs
-
-                picked_up_list.append(passenger_arrival_time)
+                    for_deletion.append((route_id_dir, passenger_arrival_time))
+                    ons = 0
+                    offs += sampled_offs
+                    got_on_bus = 0
+                    if remaining > 0:
+                        log(self.logger, _new_time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
+                    remaining = 0
             
         if offs > bus_object.current_load:
             offs = bus_object.current_load
@@ -367,12 +372,13 @@ class EnvironmentModelFast:
             got_on_bus = 0
             remaining = 0
 
+        # TODO: Adjust passenger arrival time to the latest passenger?
         # Delete passenger_waiting
         if remaining == 0:
             passenger_waiting[route_id_dir] = {}
         else:
             passenger_waiting[route_id_dir] = {
-                bus_arrival_time: {'got_on_bus': got_on_bus, 'remaining': remaining,
+                passenger_arrival_time: {'got_on_bus': got_on_bus, 'remaining': remaining,
                                          'block_trip': current_block_trip,
                                          'ons': ons, 'offs': offs}}
             log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
@@ -393,7 +399,9 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
         for deletion in for_deletion:
             route_id_dir = deletion[0]
             time_key = deletion[1]
-            del stop_object.passenger_waiting[route_id_dir][time_key]
+            if route_id_dir in stop_object.passenger_waiting:
+                if time_key in stop_object.passenger_waiting[route_id_dir]:
+                    del stop_object.passenger_waiting[route_id_dir][time_key]
             
         return True
 

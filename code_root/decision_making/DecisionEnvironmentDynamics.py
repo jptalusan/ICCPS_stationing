@@ -306,7 +306,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         # return (-2 * total_walk_aways) + (-2 * total_remaining) + total_passenger_ons
         # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons + (-40 * total_deadkms) + (-5 * total_aggregate_delay)
         # return total_passenger_ons
-        return total_passenger_ons + (-5 * total_deadkms)
+        return total_passenger_ons + (-2 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

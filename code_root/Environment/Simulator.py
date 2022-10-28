@@ -92,7 +92,6 @@ class Simulator:
 
             if len(self.event_queue) > 0:
                 if self.event_queue[0].time >= last_actionable_event_time:
-                    # if self.event_queue[0].event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
                     break
 
             # self.save_visualization(update_event.time, granularity_s=None)
