@@ -56,8 +56,8 @@ class Simulator:
         
         self.start_sim_time = time.time()
 
+        # HACK: To prevent infinite loops
         last_arrival_event = self.find_last_trip_passenger_arrival()
-        # HACK: I get into an infinite loop of reallocations
         last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
         
         # initialize state

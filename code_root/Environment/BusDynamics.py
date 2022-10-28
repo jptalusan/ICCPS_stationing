@@ -98,7 +98,6 @@ class BusDynamics:
 
             return _new_time, False
     
-    # TODO: Right now, when an bus moves from depot to stop (given it started a trip, these are not counted as deadmiles.)
     def idle_update(self, bus_id, curr_event, curr_bus_time, _new_time, full_state):
         """
         In this case, there is nothing to update for the bus' state, since it is waiting (between trips, before trips).

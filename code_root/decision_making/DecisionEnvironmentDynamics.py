@@ -127,6 +127,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
         return valid_actions, action_taken_tracker
 
+    # TODO: Allow them to be "reallocated" regardless of where they are and if they are currently being reallocated
     def get_valid_allocations(self, state):
         num_available_buses = len(
             [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
@@ -134,18 +135,14 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         if num_available_buses <= 0:
             return []
 
-        # valid_stops = list(state.stops.keys())
-        # TODO: Add selection of valid stops
         # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
         valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
         
         # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
-            if bus_obj.type == BusType.OVERLOAD and bus_obj.status == BusStatus.IDLE:
-                # if bus_obj.current_stop in valid_stops:
-                #     continue
-                # if bus_obj.current_stop not in valid_stops:
+            if bus_obj.type == BusType.OVERLOAD and (bus_obj.status == BusStatus.IDLE):
+            # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
                 idle_overload_buses.append(bus_id)
 
         valid_actions = []
@@ -158,7 +155,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         return valid_actions
 
     def take_action(self, state, action):
-        # print("take_action")
         action_type = action['type']
         ofb_id      = action['overload_bus']
         # ('HILLOMNF', '7_TO DOWNTOWN', datetime.datetime(2021, 8, 23, 14, 13, 11), 8.0, ('5692', '246343'))
@@ -190,8 +186,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                                                      'action': ActionType.OVERLOAD_DISPATCH})
 
             new_events.append(event)
-
-            # self.trips_already_covered.append(current_block_trip)
 
         # Take over broken bus
         elif ActionType.OVERLOAD_TO_BROKEN == action_type:
@@ -249,12 +243,10 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                                                                                      state.time)
 
             time_to_state_change = state.time
-            # time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = time_to_state_change
             ofb_obj.time_at_last_stop = state.time
             ofb_obj.distance_to_next_stop = distance_to_next_stop
-            # ofb_obj.status = BusStatus.ALLOCATION
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=time_to_state_change,
@@ -304,9 +296,13 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             total_aggregate_delay += bus_obj.delay_time
 
         # return (-2 * total_walk_aways) + (-2 * total_remaining) + total_passenger_ons
-        # return (-1 * total_walk_aways) + (-1 * total_remaining) + total_passenger_ons + (-40 * total_deadkms) + (-5 * total_aggregate_delay)
+        # return (-1 * total_walk_aways) + \
+        #        (-1 * total_remaining) + \
+        #        total_passenger_ons + \
+        #        (-40 * total_deadkms) + \
+        #        (-5 * total_aggregate_delay)
         # return total_passenger_ons
-        return total_passenger_ons + (-2 * total_deadkms)
+        return total_passenger_ons + (-5 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

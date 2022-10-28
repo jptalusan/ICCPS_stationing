@@ -124,7 +124,6 @@ class DecisionMaker:
         result = self.get_action([state], event_queues, passenger_arrival_distribution)
         return result
 
-    # TODO: Do i also modify the states for each new tree?
     def get_action(self, states, event_queues, passenger_arrival_distribution):
         final_action = {}
 
@@ -269,20 +268,6 @@ class DecisionMaker:
 
         return inputs
 
-    """
-    TODO: A LOT
-    * Loading same one as real world environment
-    * Issue, our events do not include the buses coming (arrival/travel time)
-    * Retain remaining people on stops but sample new ones.
-        Bus locations and travel time do not matter since they all start from either a stop or a fraction of the way
-    to the stop. If they are a fraction of the way away, do not resample travel time. just repopulate events.
-    * See if vehicles will break down. If a bus is at a stop, have a chance it will break down. Loop through buses.
-    * Loop through events and re-sample loads while adding any remaining passengers.
-    * Don't touch travel times and distances
-    *
-    * OR: just create chains from data_generation/generate_day_trips.ipynb for ons/offs
-    * AND: just generate new probabilities for breakdown based on bus location
-    """
     def load_events(self, state):
         events = copy.copy(state.bus_events)
         

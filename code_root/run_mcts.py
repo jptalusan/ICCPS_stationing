@@ -31,7 +31,6 @@ import datetime as dt
 import sys
 
 
-# TODO: Have the ability to save and load states from file.
 def load_initial_state(bus_plan, trip_plan, random_seed=100):
     print("Loading initial states...")
     active_stops = []
@@ -114,44 +113,6 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
                           time=event_datetime,
                           type_specific_information={'bus_id': bus_id})
             events.append(event)
-
-            # # Populate stops
-            # for block_trip in blocks_trips:
-            #     block = int(block_trip[0])
-            #     trip = block_trip[1]
-            #     route_id = trip_plan[trip]['route_id']
-            #     route_direction = trip_plan[trip]['route_direction']
-            #     route_id_dir = f"{route_id}_{route_direction}"
-            #     scheduled_time = trip_plan[trip]['scheduled_time']
-            #     stop_id_original = trip_plan[trip]['stop_id_original']
-            #     scheduled_time = [str_timestamp_to_datetime(st).strftime('%Y-%m-%d %H:%M:%S') for st in scheduled_time]
-
-            #     for stop_sequence in range(len(scheduled_time)):
-            #         # sampled_travel_time['23_FROM DOWNTOWN', 2310, 32, 'DWMRT', pd.Timestamp('2021-08-23 05:41:00')]
-            #         val = sampled_travel_time[route_id_dir,
-            #                                   block,
-            #                                   stop_sequence + 1,
-            #                                   stop_id_original[stop_sequence],
-            #                                   pd.Timestamp(scheduled_time[stop_sequence])]
-            #         load = val['sampled_loads']
-            #         ons = val['ons']
-            #         offs = val['offs']
-            #         print(f"{block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
-
-            #         pbar.set_description(
-            #             f"Processing {block}, {stop_id_original[stop_sequence]}, {scheduled_time[stop_sequence]}, {route_id_dir}, {load}, {ons}, {offs}")
-            #         # making sure passengers arrives before the bus
-            #         event_datetime = str_timestamp_to_datetime(f"{scheduled_time[stop_sequence]}") - dt.timedelta(
-            #             minutes=EARLY_PASSENGER_DELTA_MIN)
-
-            #         event = Event(event_type=EventType.PASSENGER_ARRIVE_STOP,
-            #                       time=event_datetime,
-            #                       type_specific_information={'route_id_dir': route_id_dir,
-            #                                                  'block_abbr': block,
-            #                                                  'stop_sequence': stop_sequence + 1,
-            #                                                  'stop_id': stop_id_original[stop_sequence],
-            #                                                  'load': load, 'ons': ons, 'offs': offs})
-            #         events.append(event)
 
         events.sort(key=lambda x: x.time, reverse=False)
 

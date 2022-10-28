@@ -8,7 +8,6 @@ from Environment.DataStructures.State import State
 from Environment.enums import ActionType
 
 
-## TODO: Remove the state.event in the MCTS.
 class ModularMCTS:
 
     def __init__(self,
@@ -211,7 +210,6 @@ class ModularMCTS:
     def expand_node(self, node):
         action_to_take = self.pick_expand_action(node)
 
-        # TODO: Incorporate past states in DecisionMaker::Load_Events
         _new_state = State(
             stops=copy.deepcopy(node.state.stops),
             buses=copy.deepcopy(node.state.buses),

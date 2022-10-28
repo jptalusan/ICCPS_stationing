@@ -9,8 +9,6 @@ from pandas.core.common import SettingWithCopyWarning
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# TODO: I'll fix the travel time and distance once the new dataset has been generated
-
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
     def __init__(self, config_name, logger):
