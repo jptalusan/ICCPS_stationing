@@ -27,10 +27,12 @@ class BareMinimumRollout:
                 node,
                 environment_model,
                 discount_factor,
-                solve_start_time):
+                solve_start_time,
+                passenger_arrival_distribution):
         s_copy_time = time.time()
         self.debug_rewards = []
         self.total_walkaways = 0
+        self.passenger_arrival_distribution = passenger_arrival_distribution
 
         truncated_events = copy.copy(node.future_events_queue)
         
@@ -47,7 +49,7 @@ class BareMinimumRollout:
         _state = State(
             stops=copy.deepcopy(node.state.stops),
             buses=copy.deepcopy(node.state.buses),
-            events=truncated_events,
+            bus_events=truncated_events,
             time=node.state.time
         )
 
@@ -96,7 +98,6 @@ class BareMinimumRollout:
         node.depth += 1
         node.event_at_node = node.future_events_queue.pop(0)
         new_events = self.process_event(node.state, node.event_at_node, environment_model)
-        # new_events = self.fast_process_event(node.state, node.event_at_node)
         if len(new_events) > 0:
             node.future_events_queue.append(new_events[0])
             node.future_events_queue.sort(key=lambda _: _.time)
@@ -119,5 +120,5 @@ class BareMinimumRollout:
         return discounted_reward
 
     def process_event(self, state, event, environment_model):
-        new_events = environment_model.update(state, event)
+        new_events = environment_model.update(state, event, self.passenger_arrival_distribution)
         return new_events

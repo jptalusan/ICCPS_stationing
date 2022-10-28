@@ -45,7 +45,9 @@ def run_low_level_mcts(arg_dict):
                         #  logger=arg_dict['logger'],
                          exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'])
 
-    res = solver.solve(arg_dict['current_state'], arg_dict['event_queue'])
+    res = solver.solve(arg_dict['current_state'], 
+                       arg_dict['bus_arrival_events'], 
+                       arg_dict['passenger_arrival_distribution'])
 
     return {'region_id': arg_dict['tree_number'],
             'mcts_res': res}
@@ -116,18 +118,21 @@ class DecisionMaker:
             print("No event available...")
             # raise "No event available. should not happen?"
             return None
+        
+        passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=1)
 
-        result = self.get_action([state], event_queues)
+        result = self.get_action([state], event_queues, passenger_arrival_distribution)
         return result
 
     # TODO: Do i also modify the states for each new tree?
-    def get_action(self, states, event_queues):
+    def get_action(self, states, event_queues, passenger_arrival_distribution):
         final_action = {}
 
         if self.pool_thread_count == 0:
             res_dict = []
             inputs = self.get_mcts_inputs(states=states,
-                                          event_queues=event_queues,
+                                          bus_arrival_events=event_queues,
+                                          passenger_arrival_distribution=passenger_arrival_distribution,
                                           discount_factor=self.discount_factor,
                                           mdp_environment_model=self.mdp_environment_model,
                                           rollout_policy=self.rollout_policy,
@@ -178,7 +183,7 @@ class DecisionMaker:
                 pool_creation_time = time.time() - start_pool_time
 
                 inputs = self.get_mcts_inputs(states=states,
-                                              event_queues=event_queues,
+                                              bus_arrival_events=event_queues,
                                               discount_factor=self.discount_factor,
                                               mdp_environment_model=self.mdp_environment_model,
                                               rollout_policy=self.rollout_policy,
@@ -233,7 +238,8 @@ class DecisionMaker:
 
     def get_mcts_inputs(self,
                         states,
-                        event_queues,
+                        bus_arrival_events,
+                        passenger_arrival_distribution,
                         discount_factor,
                         mdp_environment_model,
                         rollout_policy,
@@ -255,7 +261,8 @@ class DecisionMaker:
             input_dict['exploit_explore_tradoff_param'] = uct_tradeoff
             input_dict['allowed_computation_time'] = allowed_computation_time
             input_dict['rollout_policy'] = rollout_policy
-            input_dict['event_queue'] = copy.deepcopy(event_queues[i])
+            input_dict['bus_arrival_events'] = copy.deepcopy(bus_arrival_events[i])
+            input_dict['passenger_arrival_distribution'] = copy.copy(passenger_arrival_distribution[i])
             input_dict['current_state'] = copy.deepcopy(states[i])
             # input_dict['logger'] = self.logger
             inputs.append(input_dict)
@@ -277,7 +284,7 @@ class DecisionMaker:
     * AND: just generate new probabilities for breakdown based on bus location
     """
     def load_events(self, state):
-        events = copy.copy(state.events)
+        events = copy.copy(state.bus_events)
         
         if state.time.time() == dt.time(0, 0, 0):
             start_time = events[0].time
@@ -296,48 +303,32 @@ class DecisionMaker:
             
         return [_events]
 
+    def get_passenger_arrival_distributions(self, chain_count=1):
+        chain_dir = f'scenarios/baseline/chains'
+        passenger_arrival_chains = []
+        for chain in range(chain_count):
+            fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}.pkl'
+            with open(fp, 'rb') as handle:
+                sampled_ons_offs_dict = pickle.load(handle)
+                passenger_arrival_chains.append(sampled_ons_offs_dict)
+        return passenger_arrival_chains
+
     # Generate processed chains using generate_chains_pickles.ipynb
     def get_event_chains(self, state, chain_count=1):
         chain_dir = f'scenarios/baseline/chains/{self.event_chain_dir}'
         event_chains = []
-        state_events = copy.copy(state.events)
-        # state_events = copy.deepcopy(state.events)
-        
-        for chain in range(chain_count):
-            fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}_processed.pkl'
-            with open(fp, 'rb') as handle:
-                sampled_ons_offs_dict = pickle.load(handle)
+        state_events = copy.copy(state.bus_events)
 
-            # Keep VEHICLE_START_TRIP and PASSENGER LEAVING (which happens at the end only)
-            # Remove VEHICLE_BREAKDOWN and PASSENGER_ARRIVE_STOP to substitute it below
-            original = [pe for pe 
-                        in state_events 
-                        if (pe.event_type != EventType.PASSENGER_ARRIVE_STOP)
-                        and (pe.event_type != EventType.VEHICLE_BREAKDOWN)]
-
-            # SUBSTITUTE only PASSENGER_ARRIVE_STOP
-            chain = [pe for pe 
-                     in sampled_ons_offs_dict 
-                     if (pe.event_type == EventType.PASSENGER_ARRIVE_STOP)]
-            new_chain = original + chain
-
-            new_chain.sort(key=lambda x: x.time, reverse=False)
-
-            if state.time.time() == dt.time(0, 0, 0):
-                start_time = new_chain[0].time
-            else:
-                start_time = state.time
-                
-            # Rollout lookahead_horizon
-            if self.lookahead_horizon_delta_t:
-                lookahead_horizon = start_time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
-                _events = [event for event in new_chain if start_time <= event.time <= lookahead_horizon]
-            else:
-                _events = [event for event in new_chain if start_time <= event.time]
-                
-            # if len(_events) <= 0:
-            #     _events = new_chain[0]
-                
-            event_chains.append(_events)
+        # Rollout lookahead_horizon
+        if self.lookahead_horizon_delta_t:
+            lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
+            _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
+        else:
+            _events = [event for event in state_events if state.time <= event.time]
+            
+        # if len(_events) <= 0:
+        #     _events = new_chain[0]
+            
+        event_chains.append(_events)
             
         return event_chains

@@ -40,10 +40,12 @@ class ModularMCTS:
     # QUESTION: What would happen if there are no events in that horizon/batch/tree?
     def solve(self,
               state,
-              starting_event_queue):
+              starting_event_queue,
+              passenger_arrival_distribution):
         state = copy.deepcopy(state)
         self.solve_start_time = state.time
         self.number_of_nodes = 0
+        self.passenger_arrival_distribution = passenger_arrival_distribution
 
         possible_actions, actions_taken_tracker = self.get_possible_actions(state, 
                                                                             starting_event_queue[0])
@@ -99,7 +101,7 @@ class ModularMCTS:
                 _new_state = State(
                     stops=copy.deepcopy(root.state.stops),
                     buses=copy.deepcopy(root.state.buses),
-                    events=copy.copy(root.state.events),
+                    bus_events=copy.copy(root.state.bus_events),
                     time=root.state.time
                 )
 
@@ -185,7 +187,8 @@ class ModularMCTS:
         score = self.rollout_policy.rollout(new_node,
                                             self.mdp_environment_model,
                                             self.discount_factor,
-                                            self.solve_start_time,)
+                                            self.solve_start_time,
+                                            self.passenger_arrival_distribution)
 
         self.time_tracker['rollout'] += time.time() - rollout_start
         self.back_propagate(new_node, score)
@@ -212,7 +215,7 @@ class ModularMCTS:
         _new_state = State(
             stops=copy.deepcopy(node.state.stops),
             buses=copy.deepcopy(node.state.buses),
-            events=copy.copy(node.state.events),
+            bus_events=copy.copy(node.state.bus_events),
             time=node.state.time
         )
 
@@ -269,7 +272,7 @@ class ModularMCTS:
         """
         Moves the state forward in time.
         """
-        self.mdp_environment_model.update(state, event)
+        self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
 
     def add_event_to_event_queue(self, queue, events):
         if len(events) == 0:

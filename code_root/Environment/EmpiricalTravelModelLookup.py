@@ -151,13 +151,35 @@ class EmpiricalTravelModelLookup:
         cn = self.stop_nodes_dict[current_stop]['nearest_node']
         nn = self.stop_nodes_dict[next_stop]['nearest_node']
 
-        tt = self.stops_tt_dd_dict[(cn, nn)]['travel_time_s']
-        if tt < 0:
+        if (cn, nn) in self.stops_tt_dd_dict:
+            tt = self.stops_tt_dd_dict[(cn, nn)]['travel_time_s']
+            dd = self.stops_tt_dd_dict[(cn, nn)]['distance_m']
+        elif (nn, cn) in self.stops_tt_dd_dict:
             tt = self.stops_tt_dd_dict[(nn, cn)]['travel_time_s']
             dd = self.stops_tt_dd_dict[(nn, cn)]['distance_m']
         else:
-            dd = self.stops_tt_dd_dict[(cn, nn)]['distance_m']
-        
+            # print(f"Could not find tt/dd for {cn}/{current_stop} to {nn}/{next_stop}.")
+            return 60, 0.5
+            # raise "Error"
         if tt < 0:
-            raise f"Could not find tt/dd for {cn} to {nn}."
+            # print(f"Could not find tt/dd for {cn}/{current_stop} to {nn}/{next_stop}.")
+            return 60, 0.5
+            # raise "Error"
         return tt, dd / 1000
+    
+    def get_last_arrival_event(self, state):
+        trips = []
+        for bus_id, bus_obj in state.buses.items():
+            for block_trip in bus_obj.bus_block_trips:
+                trips.append(block_trip[1])
+        
+        last_trip_arrival = dt.datetime(year=2000, month=1, day=1, hour=0, minute=0, second=0)
+        for trip in trips:
+            trip_data = self.trip_plan[trip]
+            lta = trip_data['scheduled_time'][-1]
+            lta = str_timestamp_to_datetime(lta)
+            
+            if lta >= last_trip_arrival:
+                last_trip_arrival = lta
+            
+        return last_trip_arrival

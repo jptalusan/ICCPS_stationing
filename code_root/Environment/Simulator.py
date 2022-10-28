@@ -14,6 +14,7 @@ class Simulator:
                  environment_model,
                  event_processing_callback,
                  starting_event_queue,
+                 passenger_arrival_distribution,
                  valid_actions,
                  logger) -> None:
         
@@ -21,6 +22,7 @@ class Simulator:
         self.environment_model = environment_model
         self.event_processing_callback = event_processing_callback
         self.event_queue = starting_event_queue
+        self.passenger_arrival_distribution = passenger_arrival_distribution
         self.logger = logger
         
         self.start_sim_time = None
@@ -54,11 +56,10 @@ class Simulator:
         
         self.start_sim_time = time.time()
 
+        last_arrival_event = self.find_last_trip_passenger_arrival()
         # HACK: I get into an infinite loop of reallocations
-        last_actionable_event_time = [ev.time
-                                      for ev in self.event_queue
-                                      if ev.event_type == EventType.PASSENGER_ARRIVE_STOP][-1] + \
-                                     dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
+        last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
+        
         # initialize state
         while len(self.event_queue) > 0:
             self.update_sim_info()
@@ -82,17 +83,17 @@ class Simulator:
                 # print(f"Added {len(new_events)}")
                 
             update_event = self.event_queue.pop(0)
-            new_events = self.environment_model.update(self.state, update_event)
+            new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
             
             for event in new_events:
                 self.add_event(event)
 
-            self.state.events = copy.copy(self.event_queue)
+            self.state.bus_events = copy.copy(self.event_queue)
 
             if len(self.event_queue) > 0:
                 if self.event_queue[0].time >= last_actionable_event_time:
-                    if self.event_queue[0].event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-                        break
+                    # if self.event_queue[0].event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
+                    break
 
             # self.save_visualization(update_event.time, granularity_s=None)
             
@@ -101,6 +102,10 @@ class Simulator:
             
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
+        
+    def find_last_trip_passenger_arrival(self):
+        lta = self.environment_model.travel_model.get_last_arrival_event(self.state)
+        return lta
         
     def update_sim_info(self):
         self.num_events_processed += 1

@@ -49,3 +49,8 @@ speed up by 50% at least
 since we also decrease tree search by reducing decision nodes
 
 try outright removing them from the event list and just create a datastructure that looks up the people at that stop when a bus arrives. then update the state of that stop.
+
+Could not find tt/dd for 202314951/EDG9AWN to 202256411/EDGPEDWF.
+Could not find tt/dd for 202256411/EDGPEDWF to 202314983/EDG12AWN.
+Could not find tt/dd for 202314951/EDG9AWN to 202256411/EDGPEDWF.
+Could not find tt/dd for 202256411/EDGPEDWF to 202314983/EDG12AWN.
