@@ -61,6 +61,10 @@ class Simulator:
         last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
         
         # initialize state
+        is_prev_event_timepoint = False
+        chosen_action = None
+        update_event = None
+        
         while len(self.event_queue) > 0:
             self.update_sim_info()
 
@@ -69,8 +73,12 @@ class Simulator:
             else:
                 _valid_actions = None
             
-            chosen_action = self.event_processing_callback(_valid_actions, self.state)
-            # print(f"Chosen action: {datetime_to_str(self.state.time)} @ {chosen_action}")
+            # Only when the stop is a timepoint, but i need the event here
+            if update_event:
+                is_prev_event_timepoint = self.is_event_a_timepoint(update_event)
+            if is_prev_event_timepoint:
+                chosen_action = self.event_processing_callback(_valid_actions, self.state)
+            # chosen_action = self.event_processing_callback(_valid_actions, self.state)
 
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
 
@@ -105,6 +113,10 @@ class Simulator:
     def find_last_trip_passenger_arrival(self):
         lta = self.environment_model.travel_model.get_last_arrival_event(self.state)
         return lta
+    
+    def is_event_a_timepoint(self, curr_event):
+        is_timepoint = self.environment_model.travel_model.is_event_a_timepoint(curr_event, self.state)
+        return is_timepoint
         
     def update_sim_info(self):
         self.num_events_processed += 1

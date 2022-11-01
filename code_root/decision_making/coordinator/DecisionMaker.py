@@ -42,7 +42,6 @@ def run_low_level_mcts(arg_dict):
                          iter_limit=arg_dict['iter_limit'],
                          allowed_computation_time=arg_dict['allowed_computation_time'],
                          rollout_policy=arg_dict['rollout_policy'],
-                        #  logger=arg_dict['logger'],
                          exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'])
 
     res = solver.solve(arg_dict['current_state'], 
@@ -90,6 +89,7 @@ class DecisionMaker:
 
     # Call the MCTS in parallel here
 
+    # Check if current stop and scheduled times are timepoints, only do decisions then.
     def event_processing_callback_funct(self, actions, state):
 
         # Only do something when buses are available?
@@ -105,7 +105,12 @@ class DecisionMaker:
     # HACK: Try and see if there are any overload buses IDLE, only then you do something.
     def any_available_overload_buses(self, state):
         num_available_buses = len(
-            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+            [_ for _ in state.buses.values()
+             if ((_.status == BusStatus.IDLE)
+                 # or
+                 # (_.status == BusStatus.ALLOCATION)
+                 )
+             and _.type == BusType.OVERLOAD])
         return num_available_buses > 0
 
     def process_mcts(self, state):
@@ -183,6 +188,7 @@ class DecisionMaker:
 
                 inputs = self.get_mcts_inputs(states=states,
                                               bus_arrival_events=event_queues,
+                                              passenger_arrival_distribution=passenger_arrival_distribution,
                                               discount_factor=self.discount_factor,
                                               mdp_environment_model=self.mdp_environment_model,
                                               rollout_policy=self.rollout_policy,

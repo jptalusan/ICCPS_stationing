@@ -28,6 +28,13 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
         num_available_buses = len(
             [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+        # num_available_buses = len(
+        #     [_ for _ in state.buses.values()
+        #      if ((_.status == BusStatus.IDLE)
+        #          or
+        #          (_.status == BusStatus.ALLOCATION)
+        #          )
+        #      and _.type == BusType.OVERLOAD])
 
         if num_available_buses <= 0:
             valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
@@ -76,6 +83,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
+            # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
                 idle_overload_buses.append(bus_id)
 
         # Create matrix of overload buses, original bus id, block/trips, stop_id
@@ -166,11 +174,11 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         if ActionType.OVERLOAD_DISPATCH == action_type:
             ofb_obj = state.buses[ofb_id]
 
-            action_info        = action["info"]
-            stop_id            = action_info[0]
-            route_id_dir       = action_info[1]
-            arrival_time       = action_info[2]
-            remaining          = action_info[3]
+            action_info = action["info"]
+            stop_id = action_info[0]
+            route_id_dir = action_info[1]
+            arrival_time = action_info[2]
+            remaining = action_info[3]
             current_block_trip = action_info[4]
 
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
@@ -198,7 +206,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             current_block_trip = broken_bus_obj.current_block_trip
             stop_no            = broken_bus_obj.current_stop_number
 
-            # QUESTION: Should i copy.copy this?
             ofb_obj.bus_block_trips = [broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips
             # Remove None, in case bus has not started trip.
             ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
@@ -218,7 +225,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             ofb_obj.total_passengers_served = ofb_obj.current_load
 
             # Deactivate broken_bus_obj
-            # broken_bus_obj.total_passengers_served -= broken_bus_obj.current_load
             broken_bus_obj.current_load = 0
             broken_bus_obj.current_block_trip = None
             broken_bus_obj.bus_block_trips = []
@@ -242,28 +248,26 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
                                                                                      state.time)
 
-            time_to_state_change = state.time
+            time_to_state_change = state.time + dt.timedelta(travel_time)
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = time_to_state_change
-            ofb_obj.time_at_last_stop = state.time
+            # ofb_obj.time_at_last_stop = state.time
+            ofb_obj.status = BusStatus.ALLOCATION
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                           time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
                                                      'current_stop': current_stop,
                                                      'reallocation_stop': reallocation_stop,
-                                                     'action': ActionType.OVERLOAD_ALLOCATE})
+                                                     'action': ActionType.OVERLOAD_ALLOCATE,
+                                                     'time_added': state.time})
             new_events.append(event)
 
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
             new_events = None
-            
-            # Not sure here
-            # return 0, new_events, state.time
 
-        # QUESTION: Won't this reward be computed before any update has been done based on the action that has been taken?
         reward = self.compute_reward(state)
         return reward, new_events, state.time
 
@@ -275,20 +279,20 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         total_passengers_served = 0
         total_aggregate_delay = 0
 
-        for _, stop_obj in state.stops.items():
-            total_walk_aways += stop_obj.total_passenger_walk_away
-            total_passenger_ons += stop_obj.total_passenger_ons
-            passenger_waiting = stop_obj.passenger_waiting
-            if not passenger_waiting:
-                continue
-
-            for route_id_dir, route_pw in passenger_waiting.items():
-                if not route_pw:
-                    continue
-
-                for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    total_remaining += remaining_passengers
+        # for _, stop_obj in state.stops.items():
+        #     total_walk_aways += stop_obj.total_passenger_walk_away
+        #     total_passenger_ons += stop_obj.total_passenger_ons
+        #     passenger_waiting = stop_obj.passenger_waiting
+        #     if not passenger_waiting:
+        #         continue
+        #
+        #     for route_id_dir, route_pw in passenger_waiting.items():
+        #         if not route_pw:
+        #             continue
+        #
+        #         for arrival_time, pw in route_pw.items():
+        #             remaining_passengers = pw['remaining']
+        #             total_remaining += remaining_passengers
         
         for _, bus_obj in state.buses.items():
             total_deadkms += bus_obj.total_deadkms_moved
@@ -301,8 +305,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        total_passenger_ons + \
         #        (-40 * total_deadkms) + \
         #        (-5 * total_aggregate_delay)
-        # return total_passenger_ons
-        return total_passenger_ons + (-5 * total_deadkms)
+        # return total_passengers_served
+        return total_passengers_served + (-5 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

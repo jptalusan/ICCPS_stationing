@@ -212,7 +212,7 @@ if __name__ == '__main__':
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                   buses=Buses,
                                                   bus_id='129',
-                                                  time=str_timestamp_to_datetime('2021-08-23 14:20:00'))
+                                                  time=str_timestamp_to_datetime('2021-10-18 05:46:00'))
     # Add one last event to ensure everyone leaves
     # event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
     #               time=passenger_events[-1].time + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE))

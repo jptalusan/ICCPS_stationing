@@ -56,3 +56,14 @@ Could not find tt/dd for 202314951/EDG9AWN to 202256411/EDGPEDWF.
 Could not find tt/dd for 202256411/EDGPEDWF to 202314983/EDG12AWN.
 
 issue: buses arriving very late and still picking up passengers
+
+DONE:
+Already added time points, do i also have to do it in the rollouts?
+
+TODO:
+Need to fix the allocation again!!!
+Need to give bus under reallocation the ability to skip what they are doing and head for other allocation or broken stops
+    - questions:
+    how will we know where the bus currently is? interpolation?
+    how will we know compute?
+

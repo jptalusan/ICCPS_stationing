@@ -272,6 +272,7 @@ class ModularMCTS:
         """
         self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
 
+    # TODO: Update event to remove other events for an overflow bus
     def add_event_to_event_queue(self, queue, events):
         if len(events) == 0:
             return False

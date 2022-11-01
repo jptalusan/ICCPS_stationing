@@ -1,10 +1,7 @@
-from multiprocessing.resource_sharer import stop
-from random import sample
 from Environment.enums import BusStatus, EventType, ActionType, LogType, BusType
 from Environment.DataStructures.Event import Event
 from src.utils import *
 import datetime as dt
-import pandas as pd
 import copy
 
 
@@ -27,13 +24,13 @@ class EnvironmentModelFast:
         new_events = []
         new_time = curr_event.time
 
-        # try:
-        #     assert new_time >= state.time
-        # except AssertionError:
-        #     print(curr_event)
-        #     print(new_time)
-        #     print(state.time)
-        #     assert new_time >= state.time
+        try:
+            assert new_time >= state.time
+        except AssertionError:
+            print(curr_event)
+            print(new_time)
+            print(state.time)
+            assert new_time >= state.time
 
         # print(curr_event)
         log(self.logger, new_time, f"Event: {curr_event}", LogType.INFO)
@@ -46,26 +43,17 @@ class EnvironmentModelFast:
             state.buses[event_bus_id].status = BusStatus.BROKEN
             current_stop = state.buses[event_bus_id].current_stop
             log(self.logger, new_time, f"Bus {event_bus_id} broken down before stop {current_stop}", LogType.ERROR)
-            
+
         elif curr_event.event_type == EventType.VEHICLE_START_TRIP:
             additional_info = curr_event.type_specific_information
             bus_id = additional_info['bus_id']
             bus_state = state.buses[bus_id].status
             bus_type = state.buses[bus_id].type
-            action = additional_info.get("action")
 
-            # HACK
-            if action == ActionType.OVERLOAD_ALLOCATE:
-                state.buses[bus_id].status = BusStatus.ALLOCATION
-                bus_state = BusStatus.ALLOCATION
-                
-            elif action == ActionType.OVERLOAD_TO_BROKEN:
-                state.buses[bus_id].status = BusStatus.IDLE
-                bus_state = BusStatus.IDLE
-                
             if BusStatus.IDLE == bus_state:
                 if len(state.buses[bus_id].bus_block_trips) > 0:
-                    time_of_activation = state.buses[bus_id].t_state_change
+                    time_of_activation = new_time
+                    # time_of_activation = state.buses[bus_id].t_state_change
 
                     state.buses[bus_id].status = BusStatus.IN_TRANSIT
                     current_block_trip = state.buses[bus_id].bus_block_trips.pop(0)
@@ -73,11 +61,11 @@ class EnvironmentModelFast:
                     current_depot = state.buses[bus_id].current_stop
                     current_stop_number = state.buses[bus_id].current_stop_number
                     scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
-                                                                                        current_stop_number)
+                                                                                          current_stop_number)
 
                     travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
-                                                                                                current_depot,
-                                                                                                current_stop_number)
+                                                                                                 current_depot,
+                                                                                                 current_stop_number)
                     if BusType.OVERLOAD == bus_type:
                         state.buses[bus_id].total_deadkms_moved += distance
                     else:
@@ -90,10 +78,10 @@ class EnvironmentModelFast:
                     state.buses[bus_id].time_at_last_stop = time_of_activation
 
                     curr_event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
-                                    time=time_to_state_change,
-                                    type_specific_information={'bus_id': bus_id,
-                                                                'current_block_trip': current_block_trip,
-                                                                'stop': state.buses[bus_id].current_stop_number})
+                                       time=time_to_state_change,
+                                       type_specific_information={'bus_id': bus_id,
+                                                                  'current_block_trip': current_block_trip,
+                                                                  'stop': state.buses[bus_id].current_stop_number})
                     new_events.append(curr_event)
 
                 else:
@@ -106,36 +94,52 @@ class EnvironmentModelFast:
             elif BusStatus.BROKEN == bus_state:
                 pass
 
+            # # TODO: Check if another event supercedes this one?
             elif BusStatus.ALLOCATION == bus_state:
-                ofb_obj = state.buses[bus_id]
-                current_stop = additional_info['current_stop']
-                reallocation_stop = additional_info['reallocation_stop']
-                time_of_activation = state.buses[bus_id].t_state_change
+                print("YES")
+                pass
+            #     ofb_obj = state.buses[bus_id]
+            #     current_stop = additional_info['current_stop']
+            #     reallocation_stop = additional_info['reallocation_stop']
+            #     time_added = additional_info['time_added']
+            #     # time_of_activation = state.buses[bus_id].t_state_change
+            #     time_of_activation = new_time
+            #
+            #     travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop,
+            #                                                                       reallocation_stop,
+            #                                                                       state.time)
+            #
+            #     distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop,
+            #                                                                              reallocation_stop,
+            #                                                                              state.time)
+            #     time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            #     ofb_obj.t_state_change = time_to_state_change
+            #     ofb_obj.distance_to_next_stop = distance_to_next_stop
+            #
+            #     event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+            #                   time=time_to_state_change,
+            #                   type_specific_information={'bus_id': bus_id})
+            #     new_events.append(event)
 
-                travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop,
-                                                                                reallocation_stop,
-                                                                                state.time)
-
-                distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop,
-                                                                                        reallocation_stop,
-                                                                                        state.time)
-                time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
-                ofb_obj.t_state_change = time_to_state_change
-                ofb_obj.time_at_last_stop = state.time
-                ofb_obj.distance_to_next_stop = distance_to_next_stop
-
-                event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
-                            time=time_to_state_change,
-                            type_specific_information={'bus_id': bus_id})
-                new_events.append(event)
-            
         elif curr_event.event_type == EventType.PASSENGER_LEAVE_STOP:
             pass
-        
+
         elif curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
             additional_info = curr_event.type_specific_information
             bus_id = additional_info['bus_id']
             bus_state = state.buses[bus_id].status
+
+            action = additional_info.get("action")
+
+            # HACK
+            if action == ActionType.OVERLOAD_ALLOCATE:
+                state.buses[bus_id].status = BusStatus.ALLOCATION
+                bus_state = BusStatus.ALLOCATION
+
+            elif action == ActionType.OVERLOAD_TO_BROKEN or action == ActionType.OVERLOAD_DISPATCH:
+                state.buses[bus_id].status = BusStatus.IN_TRANSIT
+                bus_state = BusStatus.IN_TRANSIT
+            # END HACK
 
             if BusStatus.IDLE == bus_state:
                 # raise "Should not have an IDLE bus arriving at a stop."
@@ -151,13 +155,12 @@ class EnvironmentModelFast:
 
                 # Bus running time
                 if state.buses[bus_id].time_at_last_stop:
-                    state.buses[bus_id].total_service_time += (
-                                new_time - state.buses[bus_id].time_at_last_stop).total_seconds()
-                state.buses[bus_id].time_at_last_stop = time_of_arrival
+                    state.buses[bus_id].total_service_time += (new_time - state.buses[bus_id].time_at_last_stop).total_seconds()
+                state.buses[bus_id].time_at_last_stop = new_time
                 state.buses[bus_id].current_stop = current_stop_id
 
                 if current_stop_number >= 0:
-                    res = self.handle_bus_arrival(time_of_arrival, bus_id, state, passenger_arrival_distribution)
+                    self.handle_bus_arrival(time_of_arrival, bus_id, state, passenger_arrival_distribution)
                     res = self.pickup_passengers(time_of_arrival, bus_id, current_stop_id, state)
 
                 # No next stop but maybe has next trips? (will check in idle_update)
@@ -165,9 +168,10 @@ class EnvironmentModelFast:
                     state.buses[bus_id].current_stop_number = 0
                     state.buses[bus_id].status = BusStatus.IDLE
                     state.buses[bus_id].t_state_change = new_time
-                    
+                    # HACK: Again with the travel time
+                    time_of_arrival = max(new_time, time_of_arrival)
                     curr_event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                                       time=new_time, # HACK was time_of_arrival
+                                       time=time_of_arrival,
                                        type_specific_information={'bus_id': bus_id,
                                                                   'extra': 'EndOfTrip'})
                     new_events.append(curr_event)
@@ -177,9 +181,11 @@ class EnvironmentModelFast:
                     state.buses[bus_id].current_stop_number = current_stop_number + 1
                     travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                                  current_stop_id,
-                                                                                                 state.buses[bus_id].current_stop_number)
+                                                                                                 state.buses[
+                                                                                                     bus_id].current_stop_number)
                     scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
-                                                                                          state.buses[bus_id].current_stop_number)
+                                                                                          state.buses[
+                                                                                              bus_id].current_stop_number)
                     time_to_state_change = time_of_arrival + dt.timedelta(seconds=travel_time)
 
                     # Taking into account delay time
@@ -192,6 +198,9 @@ class EnvironmentModelFast:
                         dwell_time = scheduled_arrival_time - time_to_state_change
                         state.buses[bus_id].dwell_time += dwell_time.total_seconds()
                         time_to_state_change = time_to_state_change + dwell_time
+
+                    # HACK: This shouldn't happen (where a new event is earlier than the current time)
+                    time_to_state_change = max(time_to_state_change, new_time)
 
                     state.buses[bus_id].t_state_change = time_to_state_change
 
@@ -210,6 +219,7 @@ class EnvironmentModelFast:
                 distance_to_next_stop = state.buses[bus_id].distance_to_next_stop
                 state.buses[bus_id].total_deadkms_moved += distance_to_next_stop
                 state.buses[bus_id].status = BusStatus.IDLE
+                state.buses[bus_id].time_at_last_stop = new_time
                 log(self.logger, new_time, f"Reallocated Bus {bus_id} to {state.buses[bus_id].current_stop}")
                 log(self.logger, new_time, f"Bus {bus_id} deadkms: {state.buses[bus_id].total_deadkms_moved:.2f}")
 
@@ -219,7 +229,7 @@ class EnvironmentModelFast:
         # self.cleanup_stops(new_time, state)
         state.time = new_time
         return new_events
-    
+
     # Issue: it duplicates the values of walk aways
     # since this gets passed multiple times, douvle check delete
     # Issue 2: How to know if its been 30 min. if only running at the end.
@@ -243,7 +253,7 @@ class EnvironmentModelFast:
                             walk_aways = remaining
                         stop_object.total_passenger_walk_away += walk_aways
                         for_deletion.append((stop_id, route_id_dir, passenger_arrival_time))
-        
+
         for deletion in for_deletion:
             stop_id = deletion[0]
             route_id_dir = deletion[1]
@@ -251,22 +261,33 @@ class EnvironmentModelFast:
             del full_state.stops[stop_id].passenger_waiting[route_id_dir][time_key]
         return True
 
-    def handle_bus_arrival(self, _new_time, bus_id, full_state, passenger_arrival_distribution):        
+    def handle_re_reallocation(self):
+        """
+        Handles any RE-ASSIGNMENT of a bus currently being reallocated.
+        Includes being assigned as DISPATCH, ALLOCATION or to cover BROKEN buses.
+        1. Removes any other events in the future for the current overflow bus.
+        2. Finds/Interpolates location of current overflow bus.
+        """
+
+
+        pass
+
+    def handle_bus_arrival(self, _new_time, bus_id, full_state, passenger_arrival_distribution):
         current_block_trip = full_state.buses[bus_id].current_block_trip
         bus_block_trips = full_state.buses[bus_id].bus_block_trips
         current_stop_number = full_state.buses[bus_id].current_stop_number
         current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
         last_stop_number = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
         route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
-        
+
         # key = (route_id_dir,block,stop_sequence,stop_id_original,pd.Timestamp(scheduled_time[stop_sequence])]
         block_abbr = int(current_block_trip[0])
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
                                                                               current_stop_number)
-        
+
         key = (route_id_dir, block_abbr, current_stop_number + 1, current_stop_id, scheduled_arrival_time)
         val = passenger_arrival_distribution[key]
-        
+
         curr_stop_loads = val['sampled_loads']
         curr_stop_ons = val['ons']
         curr_stop_offs = val['offs']
@@ -278,13 +299,13 @@ class EnvironmentModelFast:
             passenger_waiting = {}
             passenger_waiting[route_id_dir] = {}
             passenger_waiting[route_id_dir][scheduled_arrival_time] = {'got_on_bus': 0,
-                                                                    'remaining': 0,
-                                                                    'block_trip': "",
-                                                                    'ons': curr_stop_ons,
-                                                                    'offs': curr_stop_offs}
+                                                                       'remaining': 0,
+                                                                       'block_trip': "",
+                                                                       'ons': curr_stop_ons,
+                                                                       'offs': curr_stop_offs}
 
         stop_object.passenger_waiting = passenger_waiting
-    
+
     def pickup_passengers(self, _new_time, bus_id, stop_id, full_state):
         bus_object = full_state.buses[bus_id]
         stop_object = full_state.stops[stop_id]
@@ -313,7 +334,7 @@ class EnvironmentModelFast:
         for_deletion = []
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
-                # assert passenger_arrival_time <= _new_time
+                assert passenger_arrival_time <= bus_arrival_time
                 sampled_ons = 0
                 sampled_offs = 0
                 remaining = 0
@@ -331,14 +352,14 @@ class EnvironmentModelFast:
                     offs += sampled_offs
 
                     picked_up_list.append(passenger_arrival_time)
-                    
+
                 # Substitute for the leaving events
                 elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)):
                     sampled_ons = 0
                     sampled_offs = 0
                     remaining = sampled_data.get("remaining", 0)
                     ons = sampled_data.get("ons", 0)
-                    
+
                     got_on_bus = sampled_data.get("got_on_bus", 0)
                     if got_on_bus == 0:
                         walk_aways = ons
@@ -352,7 +373,7 @@ class EnvironmentModelFast:
                     if remaining > 0:
                         log(self.logger, _new_time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
                     remaining = 0
-            
+
         if offs > bus_object.current_load:
             offs = bus_object.current_load
 
@@ -401,7 +422,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             if route_id_dir in stop_object.passenger_waiting:
                 if time_key in stop_object.passenger_waiting[route_id_dir]:
                     del stop_object.passenger_waiting[route_id_dir][time_key]
-            
+
         return True
 
     def take_action(self, state, action):
@@ -469,7 +490,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 ofb_obj.current_stop_number = stop_no - 1
 
             ofb_obj.t_state_change = state.time
-            
+
             # Switch passengers
             ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
             ofb_obj.total_passengers_served += ofb_obj.current_load
@@ -502,18 +523,22 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
                                                                                      state.time)
 
-            time_to_state_change = state.time
+            time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = time_to_state_change
-            ofb_obj.time_at_last_stop = state.time
+            # ofb_obj.time_at_last_stop = state.time
             ofb_obj.distance_to_next_stop = distance_to_next_stop
+            ofb_obj.status = BusStatus.ALLOCATION
 
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                           time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
                                                      'current_stop': current_stop,
                                                      'reallocation_stop': reallocation_stop,
-                                                     'action': ActionType.OVERLOAD_ALLOCATE})
+                                                     'action': ActionType.OVERLOAD_ALLOCATE,
+                                                     'time_added': state.time})
+
+            # _events = [be for be in state.bus_events if (be.event_type == EventType.VEHICLE_ARRIVE_AT_STOP) ]
             new_events.append(event)
             # new_events = self.dispatch_policy.
             log(self.logger, state.time,
