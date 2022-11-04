@@ -50,7 +50,6 @@ class ModularMCTS:
                                                                             starting_event_queue[0])
 
         _root_is_terminal = len(starting_event_queue[1:]) <= 0
-
         # init tree
         root = TreeNode(state=state,
                         parent=None,
@@ -84,7 +83,7 @@ class ModularMCTS:
                 self.execute_iteration(root)
                 # print(f"MCTS {iter_count}")
                 
-        print(f"MCTS solve(), {len(possible_actions)} possible actions.")
+        # print(f"MCTS solve(), {len(possible_actions)} possible actions.")
         
         if len(root.children) == 0:
             root.is_terminal = False

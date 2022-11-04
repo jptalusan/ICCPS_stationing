@@ -1,37 +1,27 @@
-# %%
 from tensorflow.keras import backend as K
 K.clear_session()
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
-import sys
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 import datetime as dt
-import importlib
-from pyspark import SparkContext,SparkConf
-from pyspark.sql import SQLContext
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark import SparkConf
 import numpy as np
 import pickle
+import random
+import json
 import joblib
-import matplotlib.pyplot as plt
 import matplotlib as mpl
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.layers import Input, Dense, LSTM, Embedding, concatenate, GlobalAveragePooling1D
-from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, Dropout
-from tensorflow.keras.layers import Conv1D
-from tensorflow.keras.models import Model
-import IPython
+from tensorflow.keras.layers import Dense, LSTM, Dropout
 from copy import deepcopy
-from tqdm import trange, tqdm
+from tqdm import tqdm
 
 mpl.rcParams['figure.facecolor'] = 'white'
 
 import warnings
 
 import pandas as pd
-import swifter
 pd.set_option('display.max_columns', None)
 from pandas.core.common import SettingWithCopyWarning
 
@@ -39,7 +29,7 @@ warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 tf.get_logger().setLevel('INFO')
 import pyspark
-print(pyspark.__version__)
+
 spark = SparkSession.builder.config('spark.executor.cores', '8').config('spark.executor.memory', '80g')\
         .config("spark.sql.session.timeZone", "UTC").config('spark.driver.memory', '40g').master("local[26]")\
         .appName("wego-daily").config('spark.driver.extraJavaOptions', '-Duser.timezone=UTC').config('spark.executor.extraJavaOptions', '-Duser.timezone=UTC')\
@@ -48,44 +38,41 @@ spark = SparkSession.builder.config('spark.executor.cores', '8').config('spark.e
         .config("spark.driver.maxResultSize", 0)\
         .config("spark.shuffle.spill", "true")\
         .getOrCreate()
-
-# %%
-# Get data for the specified day
+        
 def get_apc_data_for_date(filter_date):
-    print(f"Running this get_apc_data_for_date({filter_date})...")
-    # filepath = os.path.join('data', 'processed', 'apc_weather_gtfs.parquet')
+    print("Running this...")
     filepath = '/home/jptalusan/mta_stationing_problem/data/processed/apc_weather_gtfs_20220921.parquet'
     apcdata = spark.read.load(filepath)
     apcdata.createOrReplaceTempView("apc")
 
     plot_date = filter_date.strftime('%Y-%m-%d')
-    get_columns = ['trip_id', 'transit_date', 'arrival_time', 'scheduled_time', 'vehicle_id',
-                   'block_abbr', 'stop_sequence', 'stop_name', 'stop_id_original',
-                   'load', 
-                   'darksky_temperature', 
-                   'darksky_humidity', 
-                   'darksky_precipitation_probability', 
-                   'route_direction_name', 'route_id', 'gtfs_direction_id',
-                   'dayofweek',  'year', 'month', 'hour', 'zero_load_at_trip_end',
-                   'sched_hdwy']
+    get_columns = ['trip_id', 'transit_date', 'arrival_time', 'scheduled_time',
+                'block_abbr', 'stop_sequence', 'stop_id_original',
+                'vehicle_id', 'vehicle_capacity',
+                'load', 
+                'darksky_temperature', 
+                'darksky_humidity', 
+                'darksky_precipitation_probability', 
+                'route_direction_name', 'route_id',
+                'dayofweek',  'year', 'month', 'hour', 'zero_load_at_trip_end',
+                'sched_hdwy']
     get_str = ", ".join([c for c in get_columns])
     query = f"""
-    SELECT {get_str}
-    FROM apc
-    WHERE (transit_date == '{plot_date}')
-    ORDER BY arrival_time
+        SELECT {get_str}
+        FROM apc
+        WHERE (transit_date == '{plot_date}')
+        ORDER BY arrival_time
     """
     apcdata = spark.sql(query)
-    apcdata = apcdata.na.fill(value=0,subset=["zero_load_at_trip_end"])
     apcdata = apcdata.withColumn("route_id_dir", F.concat_ws("_", apcdata.route_id, apcdata.route_direction_name))
     apcdata = apcdata.withColumn("day", F.dayofmonth(apcdata.arrival_time))
     apcdata = apcdata.drop("route_direction_name")
     apcdata = apcdata.withColumn("load", F.when(apcdata.load < 0, 0).otherwise(apcdata.load))
+    apcdata = apcdata.na.fill(value=0,subset=["zero_load_at_trip_end"])
     return apcdata
 
-# %%
 def prepare_input_data(input_df, ohe_encoder, label_encoders, num_scaler, columns, keep_columns=[], target='y_class'):
-    num_columns = ['darksky_temperature', 'darksky_humidity', 'darksky_precipitation_probability', 'sched_hdwy', 'traffic_speed']
+    num_columns = ['darksky_temperature', 'darksky_humidity', 'darksky_precipitation_probability', 'sched_hdwy']
     cat_columns = ['month', 'hour', 'day', 'stop_sequence', 'stop_id_original', 'year', 'time_window']
     ohe_columns = ['dayofweek', 'route_id_dir', 'is_holiday', 'is_school_break', 'zero_load_at_trip_end']
 
@@ -114,13 +101,10 @@ def assign_data_to_bins(df, TARGET='load'):
     mycut = pd.cut(df[TARGET].tolist(), bins=bins)
     df['y_class'] = mycut.codes
     return df
-
-# %%
 TIMEWINDOW = 15
 def add_features(df):
     df = df[df.arrival_time.notna()]
-    df = df[df.sched_hdwy.notna()]
-    df = df[df.darksky_temperature.notna()]
+    df = df.fillna(method="bfill")
 
     df['day'] = df["arrival_time"].dt.day
     df = df.sort_values(by=['block_abbr', 'arrival_time']).reset_index(drop=True)
@@ -143,18 +127,6 @@ def add_features(df):
     df['is_school_break'] = df['is_school_break'].fillna(False)
     df = df.drop(columns=['Date'])
 
-    # Traffic
-    # Causes 3M data points to be lost
-    fp = os.path.join('data', 'triplevel_speed.pickle')
-    speed_df = pd.read_pickle(fp)
-    speed_df = speed_df.rename({'route_id_direction':'route_id_dir'}, axis=1)
-    speed_df = speed_df[['transit_date', 'trip_id', 'route_id_dir', 'traffic_speed']]
-    df = df.merge(speed_df, how='left', 
-                    left_on=['transit_date', 'trip_id', 'route_id_dir'], 
-                    right_on=['transit_date', 'trip_id', 'route_id_dir'])
-    # df = df[~df['traffic_speed'].isna()]
-    df['traffic_speed'].bfill(inplace=True)
-
     df['minute'] = df['arrival_time'].dt.minute
     df['minuteByWindow'] = df['minute'] // TIMEWINDOW
     df['temp'] = df['minuteByWindow'] + (df['hour'] * 60 / TIMEWINDOW)
@@ -169,28 +141,6 @@ def add_features(df):
 
     df = assign_data_to_bins(df, TARGET='load')
     return df
-
-# %%
-DATE = '2021-08-23'
-date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
-# date_to_predict
-# date_to_predict = dt.date(2021, 8, 23)
-apcdata = get_apc_data_for_date(date_to_predict)
-df = apcdata.toPandas()
-df = add_features(df)
-
-# %%
-# Load model
-latest = tf.train.latest_checkpoint('models/same_day/school_zero_load')
-columns = joblib.load('models/same_day/LL_X_columns.joblib')
-label_encoders = joblib.load('models/same_day/LL_Label_encoders.joblib')
-ohe_encoder = joblib.load('models/same_day/LL_OHE_encoder.joblib')
-num_scaler = joblib.load('models/same_day/LL_Num_scaler.joblib')
-
-raw_df = deepcopy(df)
-input_df = prepare_input_data(df, ohe_encoder, label_encoders, num_scaler, columns, target='y_class')
-
-# %%
 def setup_simple_lstm_generator(num_features, num_classes, learning_rate=1e-4):
     # define model
     model = tf.keras.Sequential()
@@ -217,10 +167,12 @@ def generate_simple_lstm_predictions(input_df, model, past, future):
     past_df = input_df[0:past]
     future_df = input_df[past:]
     predictions = []
+    pred_probs = []
     if future == None:
         future = len(future_df)
     for f in range(future):
         pred = model.predict(past_df.to_numpy().reshape(1, *past_df.shape))
+        pred_probs.append(pred)
         y_pred = np.argmax(pred)
         predictions.append(y_pred)
         
@@ -231,140 +183,244 @@ def generate_simple_lstm_predictions(input_df, model, past, future):
         
         # Move future to remove used row
         future_df = future_df[1:]
-    return predictions
+    return predictions, pred_probs
 
-# %%
-# import random
-
-# percentiles = [(0, 6.0), (6.0, 12.0), (12.0, 55.0), (55.0, 75.0), (75.0, 100.0)]
-
-# NUM_CLASSES = 5
-# FUTURE = None
-# PAST = 5
-
-# NUM_TRIPS = 2
-# if NUM_TRIPS == None:
-#     rand_trips = df.trip_id.unique().tolist()
-# else:
-#     rand_trips = random.sample(df.trip_id.unique().tolist(), NUM_TRIPS)
-
-
-# from multiprocessing import Process, Queue, cpu_count, Manager
-# from time import sleep
-
-# queue = Queue()
-
-# def mp_worker(L, queue):
-
-#     while queue.qsize() > 0 :
-#         trip_id = queue.get()
-#         _df = df.query("trip_id == @trip_id")
-#         _input_df = input_df.loc[_df.index]
-#         model = tf.keras.Sequential()
-#         model.add(LSTM(256, return_sequences=True))
-#         model.add(LSTM(256))
-#         model.add(Dropout(0.2))
-#         model.add(Dense(128, activation='relu'))
-#         model.add(Dropout(0.2))
-#         model.add(Dense(64, activation='relu'))
-#         model.add(Dense(5, activation='softmax'))
-
-#         # compile model
-#         model.compile(
-#             loss="sparse_categorical_crossentropy",
-#             optimizer=keras.optimizers.Adam(learning_rate=1e-4),
-#             metrics=["sparse_categorical_accuracy"],
-#         )
-
-#         input_shape = (None, None, _input_df.shape[1])
-#         model.build(input_shape)
-#         print(trip_id)
-#         y_pred = generate_simple_lstm_predictions(_input_df, model, PAST, FUTURE)
-#         print(y_pred)
-#         L.append(_input_df)
-#         # try:
-#         #     loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in y_pred]
-            
-#         #     _raw_df = raw_df.loc[_df.index]
-#         #     y_true = _raw_df[0:PAST]['load'].tolist()
-#         #     a = y_true + loads
-#         #     _raw_df['sampled_loads'] = a
-            
-#         #     L.append(_raw_df)
-#         # except:
-#         #     print(f"FAILED:{trip_id}")
-#         #     L.append(pd.DataFrame())
-#         #     continue
-
-
-# def mp_handler():
-#     with Manager() as manager:
-#         L = manager.list()
+def compute_ons_offs(s):
+    curr_load = s['sampled_loads']
+    next_load = s['next_load']
+    if next_load > curr_load:
+        ons = next_load - curr_load
+        offs = 0
+    elif next_load < curr_load:
+        ons = 0
+        offs = curr_load - next_load
+    else:
+        ons = 0
+        offs = 0
         
-#         # Spawn two processes, assigning the method to be executed 
-#         # and the input arguments (the queue)
-#         processes = [Process(target=mp_worker, args=(L,queue,)) for _ in range(cpu_count() - 1)]
+    return ons, offs
 
-#         for process in processes:
-#             process.start()
+def fix_time(x):
+    if x[0:2] == '24':
+        return '00'+x[2:]
+    if x[0:2] == '25':
+        return '01'+x[2:]
+    return x
 
-#         for process in processes:
-#             process.join()
+# Load model
+latest = tf.train.latest_checkpoint('models/no_speed')
+columns = joblib.load('models/LL_X_columns.joblib')
+label_encoders = joblib.load('models/LL_Label_encoders.joblib')
+ohe_encoder = joblib.load('models/LL_OHE_encoder.joblib')
+num_scaler = joblib.load('models/LL_Num_scaler.joblib')
 
-#         # trip_res = pd.concat(L)
-#         # return trip_res
 
-# print(rand_trips)
-# for trip_id in rand_trips:
-#     queue.put(trip_id)
-
-# # trip_res = 
-# mp_handler()
-
-# %%
-import random
-
+ohe_columns = ['dayofweek', 'route_id_dir', 'is_holiday', 'is_school_break', 'zero_load_at_trip_end']
 percentiles = [(0, 6.0), (6.0, 12.0), (12.0, 55.0), (55.0, 75.0), (75.0, 100.0)]
-
 NUM_CLASSES = 5
 FUTURE = None
 PAST = 5
-
 NUM_TRIPS = None
-if NUM_TRIPS == None:
-    rand_trips = df.trip_id.unique().tolist()
-else:
-    rand_trips = random.sample(df.trip_id.unique().tolist(), NUM_TRIPS)
+    
+# 2021-10-18, 2021-11-23, 2021-12-15, 2022-01-27, 2022-02-25, 2022-03-26, 2022-04-02
+def generate_traffic_data_for_date(DATE):
+    date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
+    apcdata = get_apc_data_for_date(date_to_predict)
+    df = apcdata.toPandas()
 
-model = setup_simple_lstm_generator(input_df.shape[1], NUM_CLASSES)
-model.load_weights(latest)
+    # HACK
+    df = df.query("route_id != 95")
+    df = df[~df['stop_id_original'].isin(['PEARL', 'JOHASHEN', 'ROS10AEN'])]
 
-trip_res = []
-load_arr = []
-for trip_id in tqdm(rand_trips):
-    _df = df.query("trip_id == @trip_id")
-    try:
-        _input_df = input_df.loc[_df.index]
-        y_pred = generate_simple_lstm_predictions(_input_df, model, PAST, FUTURE)
-        loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in y_pred]
+    df = add_features(df)
+    raw_df = deepcopy(df)
+
+    input_df = prepare_input_data(df, ohe_encoder, label_encoders, num_scaler, columns, target='y_class')
+    input_df = input_df.drop(columns=ohe_columns)
+
+    if NUM_TRIPS == None:
+        rand_trips = df.trip_id.unique().tolist()
+    else:
+        rand_trips = random.sample(df.trip_id.unique().tolist(), NUM_TRIPS)
+
+    model = setup_simple_lstm_generator(input_df.shape[1], NUM_CLASSES)
+    model.load_weights(latest)
+
+    trip_res = []
+    for trip_id in tqdm(rand_trips):
+        _df = df.query("trip_id == @trip_id")
+        try:
+            _input_df = input_df.loc[_df.index]
+            y_pred, y_pred_probs = generate_simple_lstm_predictions(_input_df, model, PAST, FUTURE)
+            loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in y_pred]
+            
+            _raw_df = raw_df.loc[_df.index]
+            y_true = _raw_df[0:PAST]['load'].tolist()
+            a = y_true + loads
+            _raw_df['sampled_loads'] = a
+            
+            y_true_classes = _raw_df[0:PAST]['y_class'].tolist()
+            _raw_df['y_pred_classes'] = y_true_classes + y_pred
+            _raw_df['y_pred_probs'] = [[-1] * NUM_CLASSES]*len(y_true_classes) + [ypp[0] for ypp in y_pred_probs]
+            
+            trip_res.append(_raw_df)
+        except:
+            print(f"FAILED:{trip_id}")
+            continue
+
+    trip_res = pd.concat(trip_res)
+    _columns = ['trip_id', 'transit_date', 'arrival_time', 'scheduled_time', 'block_abbr', 
+                'stop_sequence', 'stop_id_original', 'route_id_dir', 'zero_load_at_trip_end', 
+                'y_pred_classes', 'y_pred_probs', 'sampled_loads', 'vehicle_id', 'vehicle_capacity']
+    trip_res_df = trip_res[_columns]
+
+    trip_res_df = pd.merge(trip_res_df, raw_df[['trip_id', 'scheduled_time', 'arrival_time', 'stop_id_original']], 
+                        left_on=['trip_id', 'scheduled_time', 'arrival_time', 'stop_id_original'], 
+                        right_on=['trip_id', 'scheduled_time', 'arrival_time', 'stop_id_original'], how='left')
+    trip_res_df['trip_id'] = trip_res_df['trip_id'].astype('int')
+
+    stop_times_fp = 'data/GTFS/OCT2021/stop_times.txt'
+    stop_times_df = pd.read_csv(stop_times_fp)
+
+    trip_res_df = pd.merge(trip_res_df, stop_times_df[['trip_id', 'stop_id', 'timepoint']], left_on=['trip_id', 'stop_id_original'], right_on=['trip_id', 'stop_id'])
+    trip_res_df.query("trip_id == 264733")
+    trip_res_df = trip_res_df.drop_duplicates(subset=['trip_id', 'stop_id_original', 'arrival_time', 'scheduled_time'])
+
+    trip_res_arr = []
+    for trip_id, trip_df in trip_res_df.groupby('trip_id'):
+        trip_df.loc[trip_df.index[-1], 'timepoint']= 1.0
+        trip_res_arr.append(trip_df)
         
-        _raw_df = raw_df.loc[_df.index]
-        y_true = _raw_df[0:PAST]['load'].tolist()
-        a = y_true + loads
-        _raw_df['sampled_loads'] = a
+    trip_res_df = pd.concat(trip_res_arr)
+
+    fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
+    trip_res_df.to_pickle(fp)
+
+    DEFAULT_CAPACITY = 40.0
+
+    overall_vehicle_plan = {}
+
+    # TODO: run again with vehicle_capacity (above)
+    for vehicle_id, vehicle_df in trip_res_df.groupby('vehicle_id'):
+        vehicle_df = vehicle_df.dropna(subset=['arrival_time']).sort_values(['scheduled_time'])
+        vehicle_capacity = vehicle_df.iloc[0].vehicle_capacity
+        if np.isnan(vehicle_capacity):
+            vehicle_capacity = DEFAULT_CAPACITY
+        # TODO: This is not the baseline behavior
+        starting_depot = 'MCC5_1'
+        service_type = 'regular'
+        blocks = [block for block in vehicle_df.block_abbr.unique().tolist()]
+        trips = []
+        for block in blocks:
+            block_df = vehicle_df.query("block_abbr == @block")
+            for trip in block_df.trip_id.unique().tolist():
+                trips.append((str(block), str(trip)))
+        overall_vehicle_plan[vehicle_id] = {'vehicle_capacity': vehicle_capacity, 'trips': trips, 'starting_depot': starting_depot, 'service_type': service_type}
+
+    OVERLOAD_BUSES = 5
+    for vehicle_id in range(41, 41 + OVERLOAD_BUSES):
+        overall_vehicle_plan[str(vehicle_id)] = {'vehicle_capacity': 55.0, 'trips': [], "starting_depot": "MCC5_1", 'service_type': "overload"}
         
-        trip_res.append(_raw_df)
-    except:
-        print(f"FAILED:{trip_id}")
-        continue
+    with open(f'results/vehicle_plan_{DATE.replace("-", "")}.json', 'w') as fp:
+        json.dump(overall_vehicle_plan, fp, sort_keys=True, indent=2)
+        
+    overall_block_plan = {}
+    for block_abbr, block_df in trip_res_df.groupby('block_abbr'):
+        block_df = block_df.dropna(subset=['arrival_time']).sort_values(['scheduled_time'])
+        trip_ids = block_df.trip_id.unique().tolist()
+        start_time = block_df[block_df['trip_id'] == trip_ids[0]].iloc[0]['scheduled_time'].strftime('%Y-%m-%d %H:%M:%S')
+        end_time = block_df[block_df['trip_id'] == trip_ids[-1]].iloc[-1]['scheduled_time'].strftime('%Y-%m-%d %H:%M:%S')
+        overall_block_plan[block_abbr] = {'trip_ids': trip_ids,
+                                        'start_time': start_time,
+                                        'end_time': end_time}
 
-trip_res = pd.concat(trip_res)
+    overall_trip_plan = {}
+    for trip_id, trip_df in trip_res_df.groupby('trip_id'):
+        trip_df = trip_df.dropna(subset=['arrival_time']).sort_values(['scheduled_time'])
+        route_id_dir = trip_df.iloc[0].route_id_dir
+        route_id = int(route_id_dir.split("_")[0])
+        route_direction = route_id_dir.split("_")[1]
+        zero_load_at_trip_end = trip_df.iloc[-1].zero_load_at_trip_end.tolist()
+        scheduled_time = trip_df.scheduled_time.dt.strftime('%Y-%m-%d %H:%M:%S').tolist()
+        stop_sequence = trip_df.stop_sequence.tolist()
+        stop_sequence = list(range(0, len(stop_sequence)))
+        stop_id_original = trip_df.stop_id_original.tolist()
+        
+        overall_trip_plan[trip_id] = {'route_id': route_id, 
+                                    'route_direction': route_direction, 
+                                    'scheduled_time': scheduled_time, 
+                                    'stop_sequence': stop_sequence, 
+                                    'stop_id_original': stop_id_original,
+                                    'zero_load_at_trip_end':zero_load_at_trip_end,
+                                    'last_stop_sequence': stop_sequence[-1],
+                                    'last_stop_id': stop_id_original[-1]}
 
-# %%
-_columns = ['trip_id', 'transit_date', 'arrival_time', 'scheduled_time', 'vehicle_id', 'block_abbr', 'stop_sequence', 'stop_id_original', 'route_id_dir', 'zero_load_at_trip_end', 'sampled_loads']
-trip_res = trip_res[_columns]
+    with open(f'results/trip_plan_{DATE.replace("-", "")}.json', 'w') as fp:
+        json.dump(overall_trip_plan, fp, sort_keys=True, indent=2)
+        
+    CHAINS = 6
+    fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
+    trip_res = pd.read_pickle(fp)
 
-fp = 'results/sampled_loads.pkl'
-trip_res.to_pickle(fp)
+    for chain in tqdm(range(CHAINS)):
+        loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in trip_res.y_pred_classes]
+        trip_res['sampled_loads'] = loads
+
+        sampled_ons_offs = []
+        for trip_id, trip_id_df in trip_res.groupby(['transit_date', 'trip_id']):
+            tdf = trip_id_df.sort_values('stop_sequence').reset_index(drop=True)
+            tdf['stop_sequence'] = list(range(1, len(tdf) + 1))
+            tdf['ons'] = 0
+            tdf['offs'] = 0
+            tdf['next_load'] = tdf['sampled_loads'].shift(-1)
+            
+            # Intermediate stops
+            tdf[['ons', 'offs']] = tdf.apply(compute_ons_offs, axis=1, result_type="expand")
+            
+            # first and last stops
+            tdf.at[0, 'ons'] = tdf.iloc[0]['sampled_loads']
+            tdf.at[len(tdf) - 1, 'offs'] = tdf.iloc[-1]['sampled_loads']
+            sampled_ons_offs.append(tdf)
+            
+        df = pd.concat(sampled_ons_offs)
+        df['key_pair'] = list(zip(df.route_id_dir, 
+                                df.block_abbr,
+                                df.stop_sequence,
+                                df.stop_id_original, 
+                                df.scheduled_time))
+        df = df.set_index('key_pair')
+        sampled_ons_offs_dict = df.drop(['trip_id', 'route_id_dir', 'block_abbr', 'stop_id_original', 'stop_id', 
+                                        'scheduled_time', 'transit_date', 'arrival_time', 
+                                        'zero_load_at_trip_end', 'y_pred_classes', 'y_pred_probs',
+                                        'vehicle_capacity', 'vehicle_id',
+                                        'stop_sequence'], axis=1).to_dict('index')
+        
+        if chain == 0:
+            with open(f'results/sampled_ons_offs_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
+                pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(f'results/chains/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
+                pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
+    # stop_times_fp = 'data/GTFS/OCT2021/stop_times.txt'
+    # stop_times_df = pd.read_csv(stop_times_fp)
+    # stop_times_df['date'] = DATE
+    # stop_times_df['arrival_time'] = stop_times_df['arrival_time'].apply(lambda x: fix_time(x))
+    # stop_times_df['scheduled_time'] = pd.to_datetime(stop_times_df['date'] + ' ' + stop_times_df['arrival_time'])
+
+    # stop_times_df['key_pair'] = list(zip(stop_times_df.trip_id, stop_times_df.stop_id, stop_times_df.scheduled_time))
+    # stop_times_df = stop_times_df.set_index('key_pair')
+
+    # time_point_dict = stop_times_df.drop(['arrival_time', 'departure_time', 'stop_id', 'stop_sequence', 'stop_headsign', 'trip_id',
+    #                                       'pickup_type', 'drop_off_type', 'shape_dist_traveled', 'scheduled_time', 'date'], axis=1).to_dict('index')
+    # with open(f'results/time_point_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
+    #     pickle.dump(time_point_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+if __name__ == '__main__':
+    
+    # dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
+    dates = ['2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
+    for date in tqdm(dates):
+        generate_traffic_data_for_date(date)
+    

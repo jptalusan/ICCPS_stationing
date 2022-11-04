@@ -68,7 +68,7 @@ class DecisionMaker:
                  iter_limit,
                  lookahead_horizon_delta_t,
                  allowed_computation_time,
-                 event_chain_dir):
+                 starting_date):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -85,7 +85,8 @@ class DecisionMaker:
         self.allowed_computation_time  = allowed_computation_time
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
         
-        self.event_chain_dir = event_chain_dir
+        self.starting_date = starting_date
+        self.time_taken = {}
 
     # Call the MCTS in parallel here
 
@@ -102,13 +103,12 @@ class DecisionMaker:
             return chosen_action
         return None
 
-    # HACK: Try and see if there are any overload buses IDLE, only then you do something.
     def any_available_overload_buses(self, state):
         num_available_buses = len(
             [_ for _ in state.buses.values()
              if ((_.status == BusStatus.IDLE)
-                 # or
-                 # (_.status == BusStatus.ALLOCATION)
+                 or
+                 (_.status == BusStatus.ALLOCATION)
                  )
              and _.type == BusType.OVERLOAD])
         return num_available_buses > 0
@@ -120,8 +120,6 @@ class DecisionMaker:
         # ORACLE
         # event_queues = self.load_events(state)
         if len(event_queues[0]) <= 0:
-            print("No event available...")
-            # raise "No event available. should not happen?"
             return None
         
         passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=1)
@@ -130,8 +128,12 @@ class DecisionMaker:
         return result
 
     def get_action(self, states, event_queues, passenger_arrival_distribution):
+        # print(event_queues)
         final_action = {}
 
+
+        decision_start = time.time()
+        
         if self.pool_thread_count == 0:
             res_dict = []
             inputs = self.get_mcts_inputs(states=states,
@@ -228,17 +230,20 @@ class DecisionMaker:
             for region_id, action_dict in best_actions.items():
                 for resp_id, action_id in action_dict.items():
                     final_action[resp_id] = action_id
-                
-        print(f"Event counter: {self.event_counter}")
-        print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
-        # print(f"DecisionMaker res_dict:{res_dict[0]}")
+        
+        self.time_taken['decision_maker'] = time.time() - decision_start
+        
         sorted_actions = res_dict[0]['mcts_res']['scored_actions']
         sorted_actions.sort(key=lambda _: _['score'], reverse=True)
-        [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
         time_taken = res_dict[0]['mcts_res']['time_taken']
-        print(f"time_taken:{time_taken}")
-        # print(f"DecisionMaker final action:{final_action}")
-        print()
+        
+        # print(f"Event counter: {self.event_counter}")
+        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+        # [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        # print(f"time_taken:{time_taken}")
+        # print(f"Decision maker time: {self.time_taken}")
+        # print()
+        
         return final_action
 
     def get_mcts_inputs(self,
@@ -289,24 +294,29 @@ class DecisionMaker:
         else:
             _events = [event for event in events if start_time <= event.time]
             
-        # if len(_events) <= 0:
-        #     _events = events[0]
+        if len(_events) <= 0:
+            _events = events[0]
             
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
         chain_dir = f'scenarios/baseline/chains'
         passenger_arrival_chains = []
+        
+        start_time = time.time()
+        
         for chain in range(chain_count):
-            fp = f'{chain_dir}/ons_offs_dict_chain_{chain + 1}.pkl'
+            fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain + 1}.pkl'
             with open(fp, 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
+        
+        self.time_taken['arrival_distributions'] = time.time() - start_time
+        
         return passenger_arrival_chains
 
     # Generate processed chains using generate_chains_pickles.ipynb
-    def get_event_chains(self, state, chain_count=1):
-        chain_dir = f'scenarios/baseline/chains/{self.event_chain_dir}'
+    def get_event_chains(self, state):
         event_chains = []
         state_events = copy.copy(state.bus_events)
 
@@ -316,9 +326,6 @@ class DecisionMaker:
             _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
         else:
             _events = [event for event in state_events if state.time <= event.time]
-            
-        # if len(_events) <= 0:
-        #     _events = new_chain[0]
             
         event_chains.append(_events)
             

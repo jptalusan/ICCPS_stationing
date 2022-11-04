@@ -19,8 +19,7 @@ class RandomCoord:
         self.metrics = dict()
         self.metrics['resp_times'] = dict()
         self.metrics['computation_times'] = dict()
-        
-        self.random_seed = random.seed(102)
+
         pass
     
     def event_processing_callback_funct(self, actions, state):

@@ -22,20 +22,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         self.reward_policy         = reward_policy
         self.travel_model          = travel_model
         self.logger                = logger
-        # self.trips_already_covered = []
-        # self.served_buses          = []
-
+    
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
         num_available_buses = len(
-            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
-        # num_available_buses = len(
-        #     [_ for _ in state.buses.values()
-        #      if ((_.status == BusStatus.IDLE)
-        #          or
-        #          (_.status == BusStatus.ALLOCATION)
-        #          )
-        #      and _.type == BusType.OVERLOAD])
-
+            [_ for _ in state.buses.values()
+             if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION))
+             and _.type == BusType.OVERLOAD])
         if num_available_buses <= 0:
             valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
             action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
@@ -56,9 +48,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 for arrival_time, pw in route_pw.items():
                     remaining_passengers = pw['remaining']
                     block_trip = pw['block_trip']
-
-                    # if block_trip in self.trips_already_covered:
-                    #     continue
 
                     if remaining_passengers > 0:
                         stops_with_left_behind_passengers.append((stop_id,
@@ -83,15 +72,15 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
+            # This breaks the code!
             # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
-                idle_overload_buses.append(bus_id)
+                # Prevent overload from being used when IDLE but has TRIPS left...
+                if len(bus_obj.bus_block_trips) <= 0:
+                    idle_overload_buses.append(bus_id)
 
         # Create matrix of overload buses, original bus id, block/trips, stop_id
         valid_actions = []
-
-        # print(f"mdpEnv::Remaining people: {total_remaining}")
-        # print(f"mdpEnv::Stops with remaining people: {stops_with_left_behind_passengers}")
-        # Dispatch
+        
         if action_type == ActionType.OVERLOAD_ALL:
             _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
             _valid_actions = list(itertools.product(*_valid_actions))
@@ -119,9 +108,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
 
-        # print("mdpEnv::Number of valid actions:", len(valid_actions))
-        # print("mdpEnv::Valid actions:", valid_actions)
-
         do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
         
         if len(valid_actions) > 0:
@@ -129,13 +115,14 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             # Always add do nothing as a possible option
             valid_actions.append(do_nothing_action)
         else:
-            # No action
+        #     # No action
             valid_actions = [do_nothing_action]
         
         action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
         return valid_actions, action_taken_tracker
 
     # TODO: Allow them to be "reallocated" regardless of where they are and if they are currently being reallocated
+    # Problem is it just gets stuck in a loop of reallocation, preventing the simulation from moving forward
     def get_valid_allocations(self, state):
         num_available_buses = len(
             [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
@@ -151,7 +138,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.OVERLOAD and (bus_obj.status == BusStatus.IDLE):
             # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
-                idle_overload_buses.append(bus_id)
+                if len(bus_obj.bus_block_trips) <= 0:
+                    idle_overload_buses.append(bus_id)
 
         valid_actions = []
         _valid_actions = [[ActionType.OVERLOAD_ALLOCATE], idle_overload_buses, valid_stops]
@@ -187,6 +175,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             # Because at this point we already set the state to the next stop.
             ofb_obj.current_stop_number = stop_no
             ofb_obj.t_state_change = state.time
+            ofb_obj.status = BusStatus.IDLE
 
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
@@ -233,7 +222,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=state.time,
                           type_specific_information={'bus_id': ofb_id,
-                                                     'action': ActionType.OVERLOAD_TO_BROKEN})
+                                                     'action': ActionType.OVERLOAD_TO_BROKEN,
+                                                     'broken_bus_id': broken_bus_id})
             new_events.append(event)
 
         # QUESTION: Does it make sense to reallocate while its not IDLE, then execute once free?
@@ -243,19 +233,18 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             action_info = action["info"]
             reallocation_stop = action_info
 
-            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop,
-                                                                              state.time)
+            # travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop,
+            #                                                                   state.time)
             distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
                                                                                      state.time)
-
+            travel_time = 100
             time_to_state_change = state.time + dt.timedelta(travel_time)
+            time_to_state_change = state.time
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = time_to_state_change
-            # ofb_obj.time_at_last_stop = state.time
-            ofb_obj.status = BusStatus.ALLOCATION
             ofb_obj.distance_to_next_stop = distance_to_next_stop
 
-            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+            event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
                                                      'current_stop': current_stop,
@@ -305,8 +294,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        total_passenger_ons + \
         #        (-40 * total_deadkms) + \
         #        (-5 * total_aggregate_delay)
-        # return total_passengers_served
-        return total_passengers_served + (-5 * total_deadkms)
+        return total_passengers_served
+        # return 2 * total_passengers_served + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)
     def get_rollout_actions(self, state, actions):

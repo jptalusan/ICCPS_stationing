@@ -31,10 +31,11 @@ import datetime as dt
 import sys
 
 
-def load_initial_state(bus_plan, trip_plan, random_seed=100):
+def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
     print("Loading initial states...")
     active_stops = []
 
+    _starting_date_str = dt.datetime.strptime(starting_date, '%Y%m%d').strftime('%Y-%m-%d')
     Buses = {}
     for bus_id, bus_info in bus_plan.items():
         bus_type = bus_info['service_type']
@@ -59,7 +60,7 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
                 st = trip_plan[trip_id]['scheduled_time']
                 st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
                 # Add when the bus should reach next stop as state change
-                t_state_change = str_timestamp_to_datetime(f"{starting_date_str} {st}")
+                t_state_change = str_timestamp_to_datetime(f"{_starting_date_str} {st}")
 
         bus = Bus(bus_id,
                   bus_type,
@@ -80,13 +81,13 @@ def load_initial_state(bus_plan, trip_plan, random_seed=100):
     return Buses, Stops
 
 
-def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=100):
+def load_events(starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
     print("Adding events...")
     np.random.seed(random_seed)
     has_broken = False
-    is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y-%m-%d').weekday() < 5 else 1
+    is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y%m%d').weekday() < 5 else 1
     # Load distributions
-    with open('scenarios/baseline/data/sampled_ons_offs_dict.pkl', 'rb') as handle:
+    with open(f'scenarios/baseline/data/sampled_ons_offs_dict_{starting_date}.pkl', 'rb') as handle:
         sampled_travel_time = pickle.load(handle)
 
     # Initial events
@@ -95,6 +96,8 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
     events = []
     saved_events = f'scenarios/baseline/data/{event_file}'
 
+    _starting_date_str = dt.datetime.strptime(starting_date, '%Y%m%d').strftime('%Y-%m-%d')
+    
     pbar = tqdm(Buses.items())
     # if not os.path.exists(saved_events):
     if True:
@@ -108,7 +111,7 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
             trip = blocks_trips[0][1]
             st = trip_plan[trip]['scheduled_time']
             st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
-            event_datetime = str_timestamp_to_datetime(f"{starting_date_str} {st}")
+            event_datetime = str_timestamp_to_datetime(f"{_starting_date_str} {st}")
             event = Event(event_type=EventType.VEHICLE_START_TRIP,
                           time=event_datetime,
                           type_specific_information={'bus_id': bus_id})
@@ -116,8 +119,8 @@ def load_events(event_file, starting_date, Buses, Stops, trip_plan, random_seed=
 
         events.sort(key=lambda x: x.time, reverse=False)
 
-        with open(saved_events, "wb") as f:
-            pickle.dump(events, f)
+        # with open(saved_events, "wb") as f:
+        #     pickle.dump(events, f)
     else:
         print("loading events...")
         with open(saved_events, "rb") as f:
@@ -171,20 +174,21 @@ if __name__ == '__main__':
     elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
 
-    config_name = "config_2.json"
-    config_path = f'scenarios/baseline/data/{config_name}'
-    with open(config_path) as f:
-        config = json.load(f)
+    # config_name = f"config_20221018_2.json"
+    # config_path = f'scenarios/baseline/data/{config_name}'
+    # with open(config_path) as f:
+    #     config = json.load(f)
 
-    config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
+    starting_date_str = '20211018'
+    config_path = f'scenarios/baseline/data/trip_plan_{starting_date_str}.json'
     with open(config_path) as f:
         trip_plan = json.load(f)
 
-    config_path = f'scenarios/baseline/data/{config["vehicle_plan"]}'
+    config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_2.json'
     with open(config_path) as f:
         bus_plan = json.load(f)
 
-    travel_model = EmpiricalTravelModelLookup(config_name, logger=None)
+    travel_model = EmpiricalTravelModelLookup(starting_date_str, logger=None)
     # sim_environment = EnvironmentModel(travel_model, logger)
     sim_environment = EnvironmentModelFast(travel_model, logger)
 
@@ -194,25 +198,24 @@ if __name__ == '__main__':
     # TODO: Move to environment model once i know it works
     valid_actions = None
 
-    event_file = config["event_file"]
+    # event_file = config["event_file"]
     
-    starting_date_str = config["schedule_date"]
-    starting_date = dt.datetime.strptime(starting_date_str, '%Y-%m-%d')
+    starting_date = dt.datetime.strptime(starting_date_str, '%Y%m%d')
     starting_time = dt.time(0, 0, 0)
     starting_datetime = dt.datetime.combine(starting_date, starting_time)
 
-    Buses, Stops = load_initial_state(bus_plan, trip_plan)
+    Buses, Stops = load_initial_state(starting_date_str, bus_plan, trip_plan)
 
-    bus_arrival_events = load_events(event_file, starting_date_str, Buses, Stops, trip_plan)
+    bus_arrival_events = load_events(starting_date_str, Buses, Stops, trip_plan)
 
     # HACK:
     # Removing leave events
     # passenger_events = [pe for pe in passenger_events if pe.event_type != EventType.PASSENGER_LEAVE_STOP]
     # Injecting incident
-    bus_arrival_events = manually_insert_disruption(bus_arrival_events,
-                                                  buses=Buses,
-                                                  bus_id='129',
-                                                  time=str_timestamp_to_datetime('2021-10-18 05:46:00'))
+    # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
+    #                                               buses=Buses,
+    #                                               bus_id='120',
+    #                                               time=str_timestamp_to_datetime('2021-10-18 15:55:17'))
     # Add one last event to ensure everyone leaves
     # event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
     #               time=passenger_events[-1].time + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE))
@@ -220,7 +223,7 @@ if __name__ == '__main__':
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
-    with open('scenarios/baseline/data/sampled_ons_offs_dict.pkl', 'rb') as handle:
+    with open(f'scenarios/baseline/data/sampled_ons_offs_dict_{starting_date_str}.pkl', 'rb') as handle:
         passenger_arrival_distribution = pickle.load(handle)
     
     # END HACK
@@ -244,8 +247,6 @@ if __name__ == '__main__':
                                                         dispatch_policy,
                                                         logger=None)
     
-    event_chain_dir = config["event_chain_dir"]
-    
     decision_maker = DecisionMaker(environment_model=sim_environment,
                                    travel_model=travel_model,
                                    dispatch_policy=None,
@@ -258,8 +259,8 @@ if __name__ == '__main__':
                                    uct_tradeoff=uct_tradeoff,
                                    iter_limit=iter_limit,
                                    lookahead_horizon_delta_t=lookahead_horizon_delta_t,
-                                   allowed_computation_time=allowed_computation_time,  # 5 seconds per thread,
-                                   event_chain_dir=event_chain_dir
+                                   allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
+                                   starting_date=starting_date_str,
                                    )
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(bus_arrival_events),

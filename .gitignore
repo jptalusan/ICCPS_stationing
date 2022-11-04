@@ -351,6 +351,5 @@ code_root/*.csv
 *.json
 visualizer_root/nashville_HERE.geojson
 *.csv
-# /code_root/
-# /code_root/
 code_root/run_mcts_ALL.py
+code_root/run_mctsall.py

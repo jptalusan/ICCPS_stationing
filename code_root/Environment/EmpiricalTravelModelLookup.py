@@ -5,19 +5,15 @@ import pickle
 import pandas as pd
 import datetime as dt
 from pandas.core.common import SettingWithCopyWarning
-from Environment.enums import EventType, ActionType
+from Environment.enums import EventType, ActionType, BusType
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
-    def __init__(self, config_name, logger):
-        config_path = f'scenarios/baseline/data/{config_name}'
-        with open(config_path) as f:
-            config = json.load(f)
-
-        config_path = f'scenarios/baseline/data/{config["trip_plan"]}'
+    def __init__(self, date_str, logger):
+        config_path = f'scenarios/baseline/data/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
@@ -187,8 +183,12 @@ class EmpiricalTravelModelLookup:
         return last_trip_arrival
     
     def is_event_a_timepoint(self, curr_event, state):
-        print(curr_event)
+        # print(curr_event)
         info = curr_event.type_specific_information
+        bus_id = info['bus_id']
+
+        if state.buses[bus_id].type == BusType.OVERLOAD:
+            return True
 
         action = info.get('action')
         if action == ActionType.OVERLOAD_ALLOCATE:
@@ -203,8 +203,10 @@ class EmpiricalTravelModelLookup:
         if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
             return True
 
+        if curr_event.event_type == EventType.VEHICLE_START_TRIP:
+            return True
+
         if curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-            bus_id = info['bus_id']
             current_block_trip = info['current_block_trip']
             current_trip = current_block_trip[1]
             current_stop_number = info['stop']
@@ -214,6 +216,10 @@ class EmpiricalTravelModelLookup:
 
             key = (int(current_trip), current_stop_id, scheduled_time)
             timepoint = self.time_point_dict[key]['timepoint']
+            
+            # if len(state.bus_events) == 1:
+            #     return True
+            
             return timepoint == 1
 
-        return False
+        return True

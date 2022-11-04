@@ -84,9 +84,10 @@ class BareMinimumRollout:
     """
     SendNearestDispatch if a vehicle is broken, else do nothing.
     """
-
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
-        action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        valid_actions, _ = environment_model.generate_possible_actions(node.state, None, action_type=ActionType.OVERLOAD_ALL)
+        action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
+        # action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         

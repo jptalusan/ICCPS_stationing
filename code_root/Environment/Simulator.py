@@ -59,7 +59,8 @@ class Simulator:
         # HACK: To prevent infinite loops
         last_arrival_event = self.find_last_trip_passenger_arrival()
         last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
-        
+        # last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=1)
+
         # initialize state
         is_prev_event_timepoint = False
         chosen_action = None
@@ -81,7 +82,6 @@ class Simulator:
             # chosen_action = self.event_processing_callback(_valid_actions, self.state)
 
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-
             if chosen_action:
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             
@@ -92,7 +92,6 @@ class Simulator:
                 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
-            
             for event in new_events:
                 self.add_event(event)
 
@@ -106,6 +105,7 @@ class Simulator:
             
             # self.log_metrics()
             # print(f"Events left: {len(self.event_queue)}")
+        print("Done")
             
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
@@ -170,6 +170,8 @@ class Simulator:
             log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"current_stop: {bus_obj.current_stop}", LOGTYPE)
+            log(self.logger, dt.datetime.now(), f"status: {bus_obj.status}", LOGTYPE)
 
         for stop_id, stop_obj in self.state.stops.items():
             if stop_obj.total_passenger_walk_away > 0:

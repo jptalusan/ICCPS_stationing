@@ -60,7 +60,13 @@ issue: buses arriving very late and still picking up passengers
 DONE:
 Already added time points, do i also have to do it in the rollouts?
 
+FIXED:
+Getting stuck with dispatching when low capacity
+    - Fixd by setting IDLE before starttrip in action but...
+    - New bug: next trip not working now.
+
 TODO:
+Left as is for now since reallocation happens to frequently already.
 Need to fix the allocation again!!!
 Need to give bus under reallocation the ability to skip what they are doing and head for other allocation or broken stops
     - questions:
