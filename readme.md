@@ -92,3 +92,12 @@ Stationing
     * loop through ALL OVERFLOW buses in each bus arrival events (DONE) only for allocation buses
 4. Bring back ALLOCATION (DONE)
     * ALLOCATION ACTION maintains the bus to be IDLE and can be used for dispatch or broken (DONE)
+
+Issues:
+10 vehicle: issue with ASSERT (have solution but untested)
+Max(scheduled, t_state_change)
+EnvironmentalModelFast:258 assert passenger_arrival_time <= bus_arrival_time
+
+Some uncertainty on the overall passenger count
+* will have to count the actual in the sampled distribution for ALL buses.
+* A bit overhauled the environemtnmodelfast. Passenger pick up. I think it makes sense.
