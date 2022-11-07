@@ -203,7 +203,11 @@ if __name__ == '__main__':
     with open(config_path) as f:
         trip_plan = json.load(f)
 
-    config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
+    if vehicle_count != "":
+        config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
+    else:
+        config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}.json'
+    
     with open(config_path) as f:
         bus_plan = json.load(f)
 

@@ -290,6 +290,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         total_passengers_served = 0
         total_aggregate_delay = 0
 
+        total_broken_buses = 0
         # for _, stop_obj in state.stops.items():
         #     total_walk_aways += stop_obj.total_passenger_walk_away
         #     total_passenger_ons += stop_obj.total_passenger_ons
@@ -309,6 +310,14 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             total_deadkms += bus_obj.total_deadkms_moved
             total_passengers_served += bus_obj.total_passengers_served
             total_aggregate_delay += bus_obj.delay_time
+            
+            type = bus_obj.type
+            status = bus_obj.status
+            bus_block_trips = bus_obj.bus_block_trips
+            if type == BusType.REGULAR:
+                if bus_block_trips:
+                    if status == BusStatus.BROKEN:
+                        total_broken_buses += 1
 
         # return (-2 * total_walk_aways) + (-2 * total_remaining) + total_passenger_ons
         # return (-1 * total_walk_aways) + \
@@ -317,7 +326,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        (-40 * total_deadkms) + \
         #        (-5 * total_aggregate_delay)
         # return total_passengers_served
-        return total_passengers_served - (0.2 * total_deadkms)
+        return total_passengers_served + (-0.2 * total_deadkms) + (-100 * total_broken_buses) + (-0.2 * total_aggregate_delay)
+        # return total_passengers_served - (0.2 * total_deadkms)
         # return 2 * total_passengers_served + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)

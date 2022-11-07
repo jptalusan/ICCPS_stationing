@@ -18,7 +18,7 @@ class BareMinimumRollout:
 
     def __init__(self):
         self.deep_copy_time = 0
-        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon
+        self.rollout_horizon_delta_t = 60 * 60 * 1.0  # 60*60*N for N hour horizon (0.6)
         # self.rollout_horizon_delta_t = None
             
         self.total_walkaways = 0

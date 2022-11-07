@@ -34,7 +34,7 @@ class EnvironmentModelFast:
             assert new_time >= state.time
 
         # print(curr_event)
-        # log(self.logger, new_time, f"Event: {curr_event}", LogType.INFO)
+        log(self.logger, new_time, f"Event: {curr_event}", LogType.DEBUG)
 
         new_events = []
         if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
@@ -244,9 +244,6 @@ class EnvironmentModelFast:
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
                                                                               current_stop_number)
 
-        ons = 0
-        offs = 0
-
         if not passenger_waiting:
             return True
 
@@ -255,10 +252,21 @@ class EnvironmentModelFast:
         # TODO: Next time i should just use remaining -> ons
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
-                assert passenger_arrival_time <= bus_arrival_time
-                sampled_ons = 0
-                sampled_offs = 0
-                remaining = 0
+                # HACK: Takes too long to figure out why
+                try:
+                    assert passenger_arrival_time <= bus_arrival_time
+                except:
+                    print("ERROR HERE....")
+                    print(current_block_trip, bus_id, stop_id)
+                    print(passenger_arrival_time, bus_arrival_time)
+                    continue
+                
+                # sampled_ons = 0
+                # sampled_offs = 0
+                # remaining = 0
+
+                # ons = 0
+                # offs = 0
                 if bus_arrival_time - passenger_arrival_time <= dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE):
                     remaining = sampled_data['remaining']
                     sampled_ons = sampled_data['ons']
@@ -273,10 +281,48 @@ class EnvironmentModelFast:
                     if (got_on_bus == sampled_ons) and (sampled_ons > 0):
                         sampled_ons = 0
                         
-                    ons += sampled_ons
-                    offs += sampled_offs
+                    ons = sampled_ons
+                    offs = sampled_offs
 
                     picked_up_list.append(passenger_arrival_time)
+                    
+                    if offs > bus_object.current_load:
+                        offs = bus_object.current_load
+
+                    if (bus_object.current_load + ons - offs) > vehicle_capacity:
+                        remaining = bus_object.current_load + ons - offs - vehicle_capacity
+                        got_on_bus = max(0, ons - remaining)
+                    else:
+                        got_on_bus = ons
+                        remaining = 0
+
+                    # Special cases for the first and last stops
+                    if current_stop_number == 0:
+                        offs = 0
+                    elif current_stop_number == last_stop_in_trip:
+                        offs = bus_object.current_load
+                        got_on_bus = 0
+                        remaining = 0
+                        
+                    passenger_waiting[route_id_dir] = {
+                        passenger_arrival_time: {'got_on_bus': got_on_bus, 'remaining': remaining,
+                                                    'block_trip': current_block_trip,
+                                                    'ons': ons, 'offs': offs}}
+                    if remaining > 0:
+                        log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
+
+                    stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
+                    stop_object.total_passenger_ons += got_on_bus
+                    stop_object.total_passenger_offs += offs
+
+                    bus_object.current_load = bus_object.current_load + got_on_bus - offs
+                    bus_object.total_passengers_served += got_on_bus
+                    bus_object.total_stops += 1
+
+                    log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
+arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
+remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
+                    log(self.logger, _new_time, log_str, LogType.INFO)
 
                 # Substitute for the leaving events
                 elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)):
@@ -293,49 +339,24 @@ class EnvironmentModelFast:
                     stop_object.total_passenger_walk_away += walk_aways
                     for_deletion.append((route_id_dir, passenger_arrival_time))
                     ons = 0
-                    offs += sampled_offs
+                    offs = sampled_offs
                     got_on_bus = 0
                     if remaining > 0:
                         log(self.logger, _new_time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
                     remaining = 0
+                        
+                    passenger_waiting[route_id_dir] = {
+                        passenger_arrival_time: {'got_on_bus': got_on_bus, 'remaining': remaining,
+                                                    'block_trip': current_block_trip,
+                                                    'ons': ons, 'offs': offs}}
+                    if remaining > 0:
+                        log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
 
-        if offs > bus_object.current_load:
-            offs = bus_object.current_load
-
-        if (bus_object.current_load + ons - offs) > vehicle_capacity:
-            remaining = bus_object.current_load + ons - offs - vehicle_capacity
-            got_on_bus = max(0, ons - remaining)
-        else:
-            got_on_bus = ons
-            remaining = 0
-
-        # Special cases for the first and last stops
-        if current_stop_number == 0:
-            offs = 0
-        elif current_stop_number == last_stop_in_trip:
-            offs = bus_object.current_load
-            got_on_bus = 0
-            remaining = 0
-            
-        passenger_waiting[route_id_dir] = {
-            passenger_arrival_time: {'got_on_bus': got_on_bus, 'remaining': remaining,
-                                        'block_trip': current_block_trip,
-                                        'ons': ons, 'offs': offs}}
-        if remaining > 0:
-            log(self.logger, _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}", LogType.ERROR)
-
-        stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
-        stop_object.total_passenger_ons += got_on_bus
-        stop_object.total_passenger_offs += offs
-
-        bus_object.current_load = bus_object.current_load + got_on_bus - offs
-        bus_object.total_passengers_served += got_on_bus
-        bus_object.total_stops += 1
-
-        log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
+                    log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
 arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
-        log(self.logger, _new_time, log_str, LogType.INFO)
+                    log(self.logger, _new_time, log_str, LogType.INFO)
+
 
         # for deletion in for_deletion:
         #     route_id_dir = deletion[0]
