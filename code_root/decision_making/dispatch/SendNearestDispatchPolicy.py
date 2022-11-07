@@ -22,9 +22,12 @@ class SendNearestDispatchPolicy:
             overload_bus = action['overload_bus']
             info = action['info']
 
-            if action_type == ActionType.NO_ACTION:
-                return None
+            if (action_type == ActionType.NO_ACTION) and (len(actions) == 1):
+                return actions[0]
 
+            elif (action_type == ActionType.NO_ACTION) and (len(actions) > 1):
+                continue
+            
             current_stop = state.buses[overload_bus].current_stop
             next_stop = None
 

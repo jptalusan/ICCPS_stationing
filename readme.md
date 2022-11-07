@@ -65,6 +65,10 @@ Getting stuck with dispatching when low capacity
     - Fixd by setting IDLE before starttrip in action but...
     - New bug: next trip not working now.
 
+Rollout:
+SendNearestDispatch if a vehicle is broken, else do nothing.
+However, breakdown events are not generated in the event chains.
+
 TODO:
 Left as is for now since reallocation happens to frequently already.
 Need to fix the allocation again!!!
@@ -73,3 +77,18 @@ Need to give bus under reallocation the ability to skip what they are doing and 
     how will we know where the bus currently is? interpolation?
     how will we know compute?
 
+
+11-06-2022
+
+Stationing
+0. Brought back the config file. (DONE)
+1. Set interval for decision epochs (GLOBAL not per trip) (DONE)
+2. Remove the overflow buses first (DONE)
+    * Try to change the code to remove "VEHICLE_START_TRIP" (DONE)
+    * Only breakdown, and bus arrival events must be covered in EVENTS (DONE)
+3. Bring back the overflow (DONE)
+    * Remove ALLOCATION first and use T_STATE_CHANGE (DONE)
+    * Set them as IN_TRANSIT and ARRIVAL_AT_STOP when action is taken (DISPATCH AND BROKEN)
+    * loop through ALL OVERFLOW buses in each bus arrival events (DONE) only for allocation buses
+4. Bring back ALLOCATION (DONE)
+    * ALLOCATION ACTION maintains the bus to be IDLE and can be used for dispatch or broken (DONE)

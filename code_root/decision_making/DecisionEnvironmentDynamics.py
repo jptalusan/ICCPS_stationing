@@ -28,6 +28,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             [_ for _ in state.buses.values()
              if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION))
              and _.type == BusType.OVERLOAD])
+        
         if num_available_buses <= 0:
             valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
             action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
@@ -71,9 +72,9 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
-            if (bus_obj.type == BusType.OVERLOAD) and (bus_obj.status == BusStatus.IDLE):
-            # This breaks the code!
-            # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
+            if (bus_obj.type == BusType.OVERLOAD) and \
+                ((bus_obj.status == BusStatus.IDLE) or \
+                 (bus_obj.status == BusStatus.ALLOCATION)):
                 # Prevent overload from being used when IDLE but has TRIPS left...
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
@@ -136,8 +137,9 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
-            if bus_obj.type == BusType.OVERLOAD and (bus_obj.status == BusStatus.IDLE):
-            # if bus_obj.type == BusType.OVERLOAD and ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
+            if (bus_obj.type == BusType.OVERLOAD) and \
+                ((bus_obj.status == BusStatus.IDLE) or \
+                 (bus_obj.status == BusStatus.ALLOCATION)):
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
 
@@ -164,39 +166,55 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
             action_info = action["info"]
             stop_id = action_info[0]
-            route_id_dir = action_info[1]
-            arrival_time = action_info[2]
-            remaining = action_info[3]
             current_block_trip = action_info[4]
-
-            stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
-
+            
+            ofb_obj = state.buses[ofb_id]
             ofb_obj.bus_block_trips = [current_block_trip]
-            # Because at this point we already set the state to the next stop.
+            stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
             ofb_obj.current_stop_number = stop_no
-            ofb_obj.t_state_change = state.time
-            ofb_obj.status = BusStatus.IDLE
+            ofb_obj.status = BusStatus.IN_TRANSIT
+            
+            ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
+            
+            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
+                                                                                  stop_no)
 
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time,
+            travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
+                                                                                         ofb_obj.current_stop,
+                                                                                         stop_no)
+            ofb_obj.total_deadkms_moved += distance
+            log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
+            
+            time_of_activation = state.time
+            time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            # Buses should start either at the scheduled time, or if they are late, should start as soon as possible.
+            time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
+            ofb_obj.t_state_change = time_to_state_change
+            ofb_obj.time_at_last_stop = time_of_activation
+            
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+                          time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
-                                                     'action': ActionType.OVERLOAD_DISPATCH})
+                                                     'current_block_trip': current_block_trip,
+                                                     'stop': state.buses[ofb_id].current_stop_number})
 
             new_events.append(event)
 
+            log(self.logger, state.time,
+                f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
+                LogType.ERROR)
+
         # Take over broken bus
         elif ActionType.OVERLOAD_TO_BROKEN == action_type:
-            ofb_obj       = state.buses[ofb_id]
-            action_info   = action["info"]
+            ofb_obj = state.buses[ofb_id]
+            action_info = action["info"]
             broken_bus_id = action_info
-
             broken_bus_obj = state.buses[broken_bus_id]
 
             current_block_trip = broken_bus_obj.current_block_trip
-            stop_no            = broken_bus_obj.current_stop_number
+            stop_no = broken_bus_obj.current_stop_number
 
-            ofb_obj.bus_block_trips = [broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips
-            # Remove None, in case bus has not started trip.
+            ofb_obj.bus_block_trips = copy.copy([broken_bus_obj.current_block_trip] + broken_bus_obj.bus_block_trips)
             ofb_obj.bus_block_trips = [x for x in ofb_obj.bus_block_trips if x is not None]
 
             ofb_obj.current_block_trip = None
@@ -206,53 +224,57 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             # Because at this point we already set the state to the next stop.
             else:
                 ofb_obj.current_stop_number = stop_no - 1
+
             ofb_obj.t_state_change = state.time
-            ofb_obj.status = BusStatus.IDLE
+            ofb_obj.status = BusStatus.IN_TRANSIT
 
             # Switch passengers
-            ofb_obj.current_load = broken_bus_obj.current_load
-            ofb_obj.total_passengers_served = ofb_obj.current_load
+            ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
+            ofb_obj.total_passengers_served += ofb_obj.current_load
 
             # Deactivate broken_bus_obj
             broken_bus_obj.current_load = 0
             broken_bus_obj.current_block_trip = None
             broken_bus_obj.bus_block_trips = []
             broken_bus_obj.total_passengers_served -= ofb_obj.current_load
-
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=state.time,
+            
+            ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
+            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip, 
+                                                                                  ofb_obj.current_stop_number)
+            
+            travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
+                                                                                         ofb_obj.current_stop, 
+                                                                                         ofb_obj.current_stop_number)
+            ofb_obj.total_deadkms_moved += distance
+            log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
+            
+            time_of_activation = state.time
+            time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
+            
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+                          time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
-                                                     'action': ActionType.OVERLOAD_TO_BROKEN,
-                                                     'broken_bus_id': broken_bus_id})
+                                                     'action': ActionType.OVERLOAD_TO_BROKEN})
+
             new_events.append(event)
 
-        # QUESTION: Does it make sense to reallocate while its not IDLE, then execute once free?
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             ofb_obj = state.buses[ofb_id]
             current_stop = ofb_obj.current_stop
             action_info = action["info"]
             reallocation_stop = action_info
 
-            # travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop,
-            #                                                                   state.time)
+            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
             distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
                                                                                      state.time)
-            travel_time = 100
-            time_to_state_change = state.time + dt.timedelta(travel_time)
-            time_to_state_change = state.time
+            time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
             ofb_obj.current_stop = reallocation_stop
             ofb_obj.t_state_change = time_to_state_change
             ofb_obj.distance_to_next_stop = distance_to_next_stop
-
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=time_to_state_change,
-                          type_specific_information={'bus_id': ofb_id,
-                                                     'current_stop': current_stop,
-                                                     'reallocation_stop': reallocation_stop,
-                                                     'action': ActionType.OVERLOAD_ALLOCATE,
-                                                     'time_added': state.time})
-            new_events.append(event)
-
+            ofb_obj.time_at_last_stop = state.time
+            ofb_obj.status = BusStatus.ALLOCATION
+            
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
             new_events = None
@@ -294,7 +316,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        total_passenger_ons + \
         #        (-40 * total_deadkms) + \
         #        (-5 * total_aggregate_delay)
-        return total_passengers_served
+        # return total_passengers_served
+        return total_passengers_served - (0.2 * total_deadkms)
         # return 2 * total_passengers_served + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)

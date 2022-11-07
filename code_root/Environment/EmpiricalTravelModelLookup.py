@@ -31,7 +31,7 @@ class EmpiricalTravelModelLookup:
         with open('scenarios/baseline/data/stops_node_matching_dict.pkl', 'rb') as handle:
             self.stop_nodes_dict = pickle.load(handle)
             
-        with open('scenarios/baseline/data/time_point_dict.pkl', 'rb') as handle:
+        with open(f'scenarios/baseline/data/time_point_dict_{date_str}.pkl', 'rb') as handle:
             self.time_point_dict = pickle.load(handle)
     
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
@@ -181,45 +181,3 @@ class EmpiricalTravelModelLookup:
                 last_trip_arrival = lta
             
         return last_trip_arrival
-    
-    def is_event_a_timepoint(self, curr_event, state):
-        # print(curr_event)
-        info = curr_event.type_specific_information
-        bus_id = info['bus_id']
-
-        if state.buses[bus_id].type == BusType.OVERLOAD:
-            return True
-
-        action = info.get('action')
-        if action == ActionType.OVERLOAD_ALLOCATE:
-            return True
-
-        if action == ActionType.OVERLOAD_TO_BROKEN:
-            return True
-
-        if action == ActionType.OVERLOAD_DISPATCH:
-            return True
-
-        if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
-            return True
-
-        if curr_event.event_type == EventType.VEHICLE_START_TRIP:
-            return True
-
-        if curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-            current_block_trip = info['current_block_trip']
-            current_trip = current_block_trip[1]
-            current_stop_number = info['stop']
-            bus_object = state.buses[bus_id]
-            current_stop_id = self.get_stop_id_at_number(current_block_trip, current_stop_number)
-            scheduled_time = str_timestamp_to_datetime(self.trip_plan[current_trip]['scheduled_time'][current_stop_number])
-
-            key = (int(current_trip), current_stop_id, scheduled_time)
-            timepoint = self.time_point_dict[key]['timepoint']
-            
-            # if len(state.bus_events) == 1:
-            #     return True
-            
-            return timepoint == 1
-
-        return True

@@ -15,6 +15,7 @@ class Bus:
                  distance_to_next_stop=0.0,
                  total_servicekms_moved=0,
                  total_deadkms_moved=0,
+                 partial_deadkms_moved=0,
                  total_service_time=0.0,
                  total_passengers_served=0,
                  available_time=0.0,
@@ -36,6 +37,7 @@ class Bus:
         self.distance_to_next_stop = distance_to_next_stop
         self.total_servicekms_moved = total_servicekms_moved
         self.total_deadkms_moved = total_deadkms_moved
+        self.partial_deadkms_moved = partial_deadkms_moved
         self.total_passengers_served = total_passengers_served
         self.available_time = available_time
         self.dwell_time = dwell_time

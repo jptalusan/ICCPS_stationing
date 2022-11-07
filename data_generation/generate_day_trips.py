@@ -402,19 +402,19 @@ def generate_traffic_data_for_date(DATE):
             with open(f'results/chains/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
                 pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
             
-    # stop_times_fp = 'data/GTFS/OCT2021/stop_times.txt'
-    # stop_times_df = pd.read_csv(stop_times_fp)
-    # stop_times_df['date'] = DATE
-    # stop_times_df['arrival_time'] = stop_times_df['arrival_time'].apply(lambda x: fix_time(x))
-    # stop_times_df['scheduled_time'] = pd.to_datetime(stop_times_df['date'] + ' ' + stop_times_df['arrival_time'])
+    stop_times_fp = 'data/GTFS/OCT2021/stop_times.txt'
+    stop_times_df = pd.read_csv(stop_times_fp)
+    stop_times_df['date'] = DATE
+    stop_times_df['arrival_time'] = stop_times_df['arrival_time'].apply(lambda x: fix_time(x))
+    stop_times_df['scheduled_time'] = pd.to_datetime(stop_times_df['date'] + ' ' + stop_times_df['arrival_time'])
 
-    # stop_times_df['key_pair'] = list(zip(stop_times_df.trip_id, stop_times_df.stop_id, stop_times_df.scheduled_time))
-    # stop_times_df = stop_times_df.set_index('key_pair')
+    stop_times_df['key_pair'] = list(zip(stop_times_df.trip_id, stop_times_df.stop_id, stop_times_df.scheduled_time))
+    stop_times_df = stop_times_df.set_index('key_pair')
 
-    # time_point_dict = stop_times_df.drop(['arrival_time', 'departure_time', 'stop_id', 'stop_sequence', 'stop_headsign', 'trip_id',
-    #                                       'pickup_type', 'drop_off_type', 'shape_dist_traveled', 'scheduled_time', 'date'], axis=1).to_dict('index')
-    # with open(f'results/time_point_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
-    #     pickle.dump(time_point_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    time_point_dict = stop_times_df.drop(['arrival_time', 'departure_time', 'stop_id', 'stop_sequence', 'stop_headsign', 'trip_id',
+                                          'pickup_type', 'drop_off_type', 'shape_dist_traveled', 'scheduled_time', 'date'], axis=1).to_dict('index')
+    with open(f'results/time_point_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
+        pickle.dump(time_point_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':

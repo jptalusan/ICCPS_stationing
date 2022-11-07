@@ -81,7 +81,7 @@ def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
     return Buses, Stops
 
 
-def load_events(starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
+def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
     print("Adding events...")
     np.random.seed(random_seed)
     has_broken = False
@@ -111,10 +111,28 @@ def load_events(starting_date, Buses, Stops, trip_plan, event_file="", random_se
             trip = blocks_trips[0][1]
             st = trip_plan[trip]['scheduled_time']
             st = [str_timestamp_to_datetime(st).time().strftime('%H:%M:%S') for st in st][0]
-            event_datetime = str_timestamp_to_datetime(f"{_starting_date_str} {st}")
-            event = Event(event_type=EventType.VEHICLE_START_TRIP,
-                          time=event_datetime,
-                          type_specific_information={'bus_id': bus_id})
+            first_stop_scheduled_time = str_timestamp_to_datetime(f"{_starting_date_str} {st}")
+            current_block_trip = bus.bus_block_trips.pop(0)
+            current_stop_number = bus.current_stop_number
+            current_depot = bus.current_stop
+            
+            bus.current_block_trip = current_block_trip
+            bus.current_stop_number = current_stop_number
+            
+            travel_time, distance = travel_model.get_traveltime_distance_from_depot(current_block_trip,
+                                                                                    current_depot,
+                                                                                    bus.current_stop_number)
+            
+            time_to_state_change = first_stop_scheduled_time + dt.timedelta(seconds=travel_time)
+            bus.t_state_change = time_to_state_change
+            bus.distance_to_next_stop = distance
+            bus.status = BusStatus.IN_TRANSIT
+            
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+                               time=time_to_state_change,
+                               type_specific_information={'bus_id': bus_id,
+                                                          'current_block_trip': current_block_trip,
+                                                          'stop': bus.current_stop_number})
             events.append(event)
 
         events.sort(key=lambda x: x.time, reverse=False)
@@ -150,10 +168,15 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 
 if __name__ == '__main__':
-    datetime_str = dt.datetime.strftime(dt.date.today(), DATETIME_FORMAT)
+    config_path = f'scenarios/baseline/data/config.json'
+    with open(config_path) as f:
+        config = json.load(f)
+        
+    datetime_str = dt.datetime.strftime(dt.date.today(), '%Y%m%d')
     # sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
     
-    spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
+    # spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
+    spd.FileLogger(name='test', filename=f'logs/{datetime_str}_{config["mcts_log_name"]}', truncate=True)
     logger = spd.get('test')
     logger.set_pattern("[%l] %v")
     # logger = None
@@ -173,18 +196,14 @@ if __name__ == '__main__':
         logger.set_level(spd.LogLevel.DEBUG)
     elif args["log_level"] == 'ERROR':
         logger.set_level(spd.LogLevel.ERR)
-
-    # config_name = f"config_20221018_2.json"
-    # config_path = f'scenarios/baseline/data/{config_name}'
-    # with open(config_path) as f:
-    #     config = json.load(f)
-
-    starting_date_str = '20211018'
+        
+    vehicle_count = config["vehicle_count"]
+    starting_date_str = config['starting_date_str']
     config_path = f'scenarios/baseline/data/trip_plan_{starting_date_str}.json'
     with open(config_path) as f:
         trip_plan = json.load(f)
 
-    config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_2.json'
+    config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
     with open(config_path) as f:
         bus_plan = json.load(f)
 
@@ -193,7 +212,7 @@ if __name__ == '__main__':
     sim_environment = EnvironmentModelFast(travel_model, logger)
 
     # TODO: Switch dispatch policies with NearestDispatch
-    dispatch_policy = RandomDispatch(travel_model)
+    dispatch_policy = SendNearestDispatchPolicy(travel_model) # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
     valid_actions = None
@@ -206,20 +225,14 @@ if __name__ == '__main__':
 
     Buses, Stops = load_initial_state(starting_date_str, bus_plan, trip_plan)
 
-    bus_arrival_events = load_events(starting_date_str, Buses, Stops, trip_plan)
+    bus_arrival_events = load_events(travel_model, starting_date_str, Buses, Stops, trip_plan)
 
     # HACK:
-    # Removing leave events
-    # passenger_events = [pe for pe in passenger_events if pe.event_type != EventType.PASSENGER_LEAVE_STOP]
     # Injecting incident
-    # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
-    #                                               buses=Buses,
-    #                                               bus_id='120',
-    #                                               time=str_timestamp_to_datetime('2021-10-18 15:55:17'))
-    # Add one last event to ensure everyone leaves
-    # event = Event(event_type=EventType.PASSENGER_LEAVE_STOP,
-    #               time=passenger_events[-1].time + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE))
-    # bus_arrival_events.append(event)
+    bus_arrival_events = manually_insert_disruption(bus_arrival_events,
+                                                 buses=Buses,
+                                                 bus_id='140',
+                                                 time=str_timestamp_to_datetime('2021-10-18 05:45:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -233,15 +246,15 @@ if __name__ == '__main__':
                                          bus_events=bus_arrival_events, 
                                          time=bus_arrival_events[0].time))
 
-    mcts_discount_factor = 0.99997
+    mcts_discount_factor = config["mcts_discount_factor"]
     # mcts_discount_factor = 1
     rollout_policy = BareMinimumRollout()
     lookahead_horizon_delta_t = 60 * 60 * 1  # 60*60*N for N hour horizon
     # lookahead_horizon_delta_t = None  # Runs until the end
-    uct_tradeoff = 1.44
+    uct_tradeoff = config["uct_tradeoff"]
     pool_thread_count = 0
-    iter_limit = 200
-    allowed_computation_time = 15
+    iter_limit = config["iter_limit"]
+    allowed_computation_time = config["allowed_computation_time"]
     mcts_type = MCTSType.MODULAR_MCTS
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
                                                         dispatch_policy,
@@ -269,7 +282,8 @@ if __name__ == '__main__':
                           event_processing_callback=decision_maker.event_processing_callback_funct,
                           passenger_arrival_distribution=passenger_arrival_distribution,
                           valid_actions=valid_actions,
-                          logger=logger)
+                          logger=logger,
+                          minute_interval=config['minute_interval'])
 
     simulator.run_simulation()
 

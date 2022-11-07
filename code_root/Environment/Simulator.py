@@ -2,10 +2,11 @@ import copy
 import time
 
 import pandas as pd
-from Environment.enums import BusStatus, BusType, EventType
+from Environment.enums import BusStatus, BusType, ActionType, EventType
 from src.utils import *
 import datetime as dt
 import spdlog as spd
+import numpy as np
 
 class Simulator:
     
@@ -16,7 +17,8 @@ class Simulator:
                  starting_event_queue,
                  passenger_arrival_distribution,
                  valid_actions,
-                 logger) -> None:
+                 logger,
+                 minute_interval) -> None:
         
         self.state = starting_state
         self.environment_model = environment_model
@@ -28,6 +30,8 @@ class Simulator:
         self.start_sim_time = None
         self.starting_num_events = len(starting_event_queue)
         self.num_events_processed = 0
+        self.num_decision_epochs = 0
+        self.minute_interval = minute_interval
         
         spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
         self.visual_log = spd.get('visualizer')
@@ -56,15 +60,12 @@ class Simulator:
         
         self.start_sim_time = time.time()
 
-        # HACK: To prevent infinite loops
-        last_arrival_event = self.find_last_trip_passenger_arrival()
-        last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)
-        # last_actionable_event_time = last_arrival_event + dt.timedelta(minutes=1)
-
         # initialize state
-        is_prev_event_timepoint = False
         chosen_action = None
         update_event = None
+        
+        # Initialize timepoints (N minute intervals)
+        timepoint_array = self.generate_timepoints(self.event_queue, minute_intervals=self.minute_interval)
         
         while len(self.event_queue) > 0:
             self.update_sim_info()
@@ -75,32 +76,29 @@ class Simulator:
                 _valid_actions = None
             
             # Only when the stop is a timepoint, but i need the event here
-            if update_event:
-                is_prev_event_timepoint = self.is_event_a_timepoint(update_event)
-            if is_prev_event_timepoint:
+            if update_event and (update_event.time >= timepoint_array[self.num_decision_epochs]):
                 chosen_action = self.event_processing_callback(_valid_actions, self.state)
-            # chosen_action = self.event_processing_callback(_valid_actions, self.state)
+                self.num_decision_epochs += 1
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            elif update_event and (update_event.event_type == EventType.VEHICLE_BREAKDOWN):
+                chosen_action = self.event_processing_callback(_valid_actions, self.state)
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            else:
+                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
-            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             if chosen_action:
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             
                 for event in new_events:
                     self.add_event(event)
 
-                # print(f"Added {len(new_events)}")
-                
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
             for event in new_events:
                 self.add_event(event)
 
             self.state.bus_events = copy.copy(self.event_queue)
-
-            if len(self.event_queue) > 0:
-                if self.event_queue[0].time >= last_actionable_event_time:
-                    break
-
+                
             # self.save_visualization(update_event.time, granularity_s=None)
             
             # self.log_metrics()
@@ -110,13 +108,12 @@ class Simulator:
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
         
-    def find_last_trip_passenger_arrival(self):
-        lta = self.environment_model.travel_model.get_last_arrival_event(self.state)
-        return lta
-    
-    def is_event_a_timepoint(self, curr_event):
-        is_timepoint = self.environment_model.travel_model.is_event_a_timepoint(curr_event, self.state)
-        return is_timepoint
+    def generate_timepoints(self, event_queue, minute_intervals=15):
+        start_time = event_queue[0].time
+        base_time = start_time.replace(minute=0, second=0, microsecond=0)
+        end_time = start_time.replace(hour=2, minute=0, second=0, microsecond=0) + dt.timedelta(days=1)
+        time_array = np.arange(base_time, end_time, np.timedelta64(minute_intervals, 'm'))
+        return time_array
         
     def update_sim_info(self):
         self.num_events_processed += 1
@@ -162,6 +159,7 @@ class Simulator:
     def print_states(self):
         LOGTYPE = LogType.INFO
         log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)
+        log(self.logger, dt.datetime.now(), f"Total decision epochs: {self.num_decision_epochs}", LOGTYPE)
         for bus_id, bus_obj in self.state.buses.items():
             log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)

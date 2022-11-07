@@ -106,10 +106,7 @@ class DecisionMaker:
     def any_available_overload_buses(self, state):
         num_available_buses = len(
             [_ for _ in state.buses.values()
-             if ((_.status == BusStatus.IDLE)
-                 or
-                 (_.status == BusStatus.ALLOCATION)
-                 )
+             if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION))
              and _.type == BusType.OVERLOAD])
         return num_available_buses > 0
 
@@ -237,12 +234,12 @@ class DecisionMaker:
         sorted_actions.sort(key=lambda _: _['score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
         
-        # print(f"Event counter: {self.event_counter}")
-        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
-        # [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
-        # print(f"time_taken:{time_taken}")
-        # print(f"Decision maker time: {self.time_taken}")
-        # print()
+        print(f"Event counter: {self.event_counter}")
+        print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+        [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        print(f"time_taken:{time_taken}")
+        print(f"Decision maker time: {self.time_taken}")
+        print()
         
         return final_action
 
@@ -295,7 +292,7 @@ class DecisionMaker:
             _events = [event for event in events if start_time <= event.time]
             
         if len(_events) <= 0:
-            _events = events[0]
+            _events = [events[0]]
             
         return [_events]
 
