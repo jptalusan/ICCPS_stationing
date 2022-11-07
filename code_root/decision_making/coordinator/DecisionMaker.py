@@ -111,15 +111,17 @@ class DecisionMaker:
         return num_available_buses > 0
 
     def process_mcts(self, state):
-        # EVENT CHAINS
-        event_queues = self.get_event_chains(state)
+        ORACLE = True
 
-        # ORACLE
-        # event_queues = self.load_events(state)
+        if ORACLE:
+            event_queues = self.load_events(state)
+            passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=0)
+        else:
+            event_queues = self.get_event_chains(state)
+            passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=1)
+
         if len(event_queues[0]) <= 0:
             return None
-        
-        passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=1)
 
         result = self.get_action([state], event_queues, passenger_arrival_distribution)
         return result
@@ -298,19 +300,26 @@ class DecisionMaker:
 
     def get_passenger_arrival_distributions(self, chain_count=1):
         chain_dir = f'scenarios/baseline/chains'
+
         passenger_arrival_chains = []
-        
-        start_time = time.time()
-        
-        for chain in range(chain_count):
-            fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain + 1}.pkl'
-            with open(fp, 'rb') as handle:
+        # Oracle
+        if chain_count == 0:
+            with open(f'scenarios/baseline/data/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
-        
-        self.time_taken['arrival_distributions'] = time.time() - start_time
-        
-        return passenger_arrival_chains
+            return passenger_arrival_chains
+        else:
+            start_time = time.time()
+
+            for chain in range(chain_count):
+                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain + 1}.pkl'
+                with open(fp, 'rb') as handle:
+                    sampled_ons_offs_dict = pickle.load(handle)
+                    passenger_arrival_chains.append(sampled_ons_offs_dict)
+
+            self.time_taken['arrival_distributions'] = time.time() - start_time
+
+            return passenger_arrival_chains
 
     # Generate processed chains using generate_chains_pickles.ipynb
     def get_event_chains(self, state):
