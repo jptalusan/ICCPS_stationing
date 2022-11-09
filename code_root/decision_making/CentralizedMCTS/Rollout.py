@@ -18,7 +18,7 @@ class BareMinimumRollout:
 
     def __init__(self):
         self.deep_copy_time = 0
-        self.rollout_horizon_delta_t = 60 * 60 * 1.0  # 60*60*N for N hour horizon (0.6)
+        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon (0.6)
         # self.rollout_horizon_delta_t = None
             
         self.total_walkaways = 0
@@ -86,9 +86,9 @@ class BareMinimumRollout:
     However, breakdown events are not generated in the event chains.
     """
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
-        valid_actions, _ = environment_model.generate_possible_actions(node.state, None, action_type=ActionType.OVERLOAD_TO_BROKEN)
-        action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
-        # action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        # valid_actions, _ = environment_model.generate_possible_actions(node.state, node.event_at_node, action_type=ActionType.OVERLOAD_TO_BROKEN)
+        # action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
+        action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         

@@ -17,7 +17,7 @@ class ModularMCTS:
                  iter_limit,
                  allowed_computation_time,
                  exploit_explore_tradoff_param,
-                 logger=None,
+                 action_type
                  ):
         self.allowed_computation_time = allowed_computation_time
         self.rollout_policy = rollout_policy
@@ -34,7 +34,7 @@ class ModularMCTS:
                              'select': 0,
                              'rollout': 0}
 
-        self.logger = logger
+        self.action_type = action_type
 
     # QUESTION: What would happen if there are no events in that horizon/batch/tree?
     def solve(self,
@@ -46,8 +46,9 @@ class ModularMCTS:
         self.number_of_nodes = 0
         self.passenger_arrival_distribution = passenger_arrival_distribution
 
-        possible_actions, actions_taken_tracker = self.get_possible_actions(state, 
-                                                                            starting_event_queue[0])
+        possible_actions, actions_taken_tracker = self.get_possible_actions(state,
+                                                                            starting_event_queue[0],
+                                                                            self.action_type)
 
         _root_is_terminal = len(starting_event_queue[1:]) <= 0
         # init tree
@@ -82,9 +83,9 @@ class ModularMCTS:
                 iter_count += 1
                 self.execute_iteration(root)
                 # print(f"MCTS {iter_count}")
-                
+
         # print(f"MCTS solve(), {len(possible_actions)} possible actions.")
-        
+
         if len(root.children) == 0:
             root.is_terminal = False
             new_root_actions_taken_tracker = []
@@ -128,18 +129,11 @@ class ModularMCTS:
         best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
         actions_with_scores = self.get_scored_child_actions(root)
 
-        # print(f"MCTS action with scores: {actions_with_scores}")
-
-        # TODO: Something cannot be pickled, leading to recursion error:
-        # https://stackoverflow.com/questions/52021254/maximum-recursion-depth-exceeded-multiprocessing-and-bs4
-        # https://stackoverflow.com/questions/22233478/how-to-check-which-detail-of-a-complex-object-cannot-be-pickled
-        # dill.detect.trace(True)
-        # _f = dill.dumps(root)
-        
         return {'scored_actions': actions_with_scores,
                 'number_nodes': self.number_of_nodes,
                 'time_taken': self.time_tracker,
-                'tree': root}
+                # 'tree': root
+                }
 
     def get_scored_child_actions(self, node):
         scored_actions = []
@@ -154,13 +148,13 @@ class ModularMCTS:
 
         return scored_actions
 
-    def get_possible_actions(self, state, event):
+    def get_possible_actions(self, state, event, action_type):
         """
         Actions
         """
         possible_actions = self.mdp_environment_model.generate_possible_actions(state,
                                                                                 event,
-                                                                                action_type=ActionType.OVERLOAD_ALL)
+                                                                                action_type=action_type)
         # print(f"MCTS actions: {possible_actions}")
         return possible_actions
 
@@ -226,7 +220,9 @@ class ModularMCTS:
         _expand_node_event = _new_node_future_event_queue.pop(0)
         self.process_event(_new_state, _expand_node_event)
 
-        new_possible_actions, actions_taken_tracker = self.get_possible_actions(_new_state, _expand_node_event)
+        new_possible_actions, actions_taken_tracker = self.get_possible_actions(_new_state,
+                                                                                _expand_node_event,
+                                                                                self.action_type)
 
         assert len(new_possible_actions) > 0
         is_new_node_fully_expanded = False
@@ -318,11 +314,11 @@ class ModularMCTS:
     def uct_score(self, node):
         exploit = (node.score / node.num_visits)
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
-        
+
         # I just copied from Ava's code
         scaled_explore_param = self.exploit_explore_tradoff_param * abs(exploit)
         scaled_explore_2 = scaled_explore_param * explore
         score = exploit + scaled_explore_2
-        
+
         # score = exploit + explore
         return score

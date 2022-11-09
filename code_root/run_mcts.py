@@ -168,7 +168,13 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 
 if __name__ == '__main__':
-    config_path = f'scenarios/baseline/data/config.json'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--log_level', type=str, default='DEBUG')
+    parser.add_argument('-c', '--config', type=str, default='DEBUG')
+    args = parser.parse_args()
+    args = namespace_to_dict(args)
+
+    config_path = f'scenarios/baseline/data/{args["config"]}.json'
     with open(config_path) as f:
         config = json.load(f)
         
@@ -186,10 +192,6 @@ if __name__ == '__main__':
     # mcts_logger.set_pattern("[%l] %v")
     mcts_logger = None
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--log_level', type=str, default='DEBUG')
-    args = parser.parse_args()
-    args = namespace_to_dict(args)
     if args["log_level"] == 'INFO':
         logger.set_level(spd.LogLevel.INFO)
     elif args["log_level"] == 'DEBUG':
@@ -236,7 +238,7 @@ if __name__ == '__main__':
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                  buses=Buses,
                                                  bus_id='140',
-                                                 time=str_timestamp_to_datetime('2021-10-18 05:45:00'))
+                                                 time=str_timestamp_to_datetime('2021-10-18 05:16:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -256,7 +258,7 @@ if __name__ == '__main__':
     lookahead_horizon_delta_t = 60 * 60 * 1  # 60*60*N for N hour horizon
     # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = config["uct_tradeoff"]
-    pool_thread_count = 0
+    pool_thread_count = config["pool_thread_count"]
     iter_limit = config["iter_limit"]
     allowed_computation_time = config["allowed_computation_time"]
     mcts_type = MCTSType.MODULAR_MCTS
@@ -287,7 +289,8 @@ if __name__ == '__main__':
                           passenger_arrival_distribution=passenger_arrival_distribution,
                           valid_actions=valid_actions,
                           logger=logger,
-                          minute_interval=config['minute_interval'])
+                          minute_interval=config['minute_interval'],
+                          log_name=config["mcts_log_name"])
 
     simulator.run_simulation()
 

@@ -18,7 +18,8 @@ class Simulator:
                  passenger_arrival_distribution,
                  valid_actions,
                  logger,
-                 minute_interval) -> None:
+                 minute_interval,
+                 log_name) -> None:
         
         self.state = starting_state
         self.environment_model = environment_model
@@ -32,24 +33,31 @@ class Simulator:
         self.num_events_processed = 0
         self.num_decision_epochs = 0
         self.minute_interval = minute_interval
-        
+        self.log_name = log_name
+
         spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
         self.visual_log = spd.get('visualizer')
         self.visual_log.set_pattern("%v")
         self.visual_log.set_level(spd.LogLevel.DEBUG)
         self.visual_log.debug(f"time,id,trip_id,last_visited_stop,value,fraction,icon,radius")
-        
-        spd.FileLogger(name='stop_metrics', filename='stop_metrics.csv', truncate=True)
+
+        spd.FileLogger(name='stop_metrics', filename=f'logs/stop_metrics_{self.log_name}.csv', truncate=True)
         self.stop_metrics_log = spd.get('stop_metrics')
         self.stop_metrics_log.set_pattern("%v")
         self.stop_metrics_log.set_level(spd.LogLevel.DEBUG)
-        self.stop_metrics_log.debug(f"state_time,stop_id,ons,offs,remaining")
+        self.stop_metrics_log.debug(f"state_time,stop_id,total_ons,total_offs,total_walkaway,ons,offs,remaining")
         
-        spd.FileLogger(name='bus_metrics', filename='bus_metrics.csv', truncate=True)
+        spd.FileLogger(name='bus_metrics', filename=f'logs/bus_metrics_{self.log_name}.csv', truncate=True)
         self.bus_metrics_log = spd.get('bus_metrics')
         self.bus_metrics_log.set_pattern("%v")
         self.bus_metrics_log.set_level(spd.LogLevel.DEBUG)
-        self.bus_metrics_log.debug(f"state_time,bus_id,status,type,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served")
+        self.bus_metrics_log.debug(f"state_time,bus_id,status,type,capacity,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served,deadkms,servicekms")
+
+        spd.FileLogger(name='action_taken', filename=f'logs/action_taken_{self.log_name}.csv', truncate=True)
+        self.action_taken_log = spd.get('action_taken')
+        self.action_taken_log.set_pattern("%v")
+        self.action_taken_log.set_level(spd.LogLevel.DEBUG)
+        self.action_taken_log.debug(f"state_time,action")
         
         self.last_visual_log = None
         self.valid_actions = valid_actions
@@ -74,23 +82,32 @@ class Simulator:
                 _valid_actions = self.valid_actions.get_valid_actions(self.state)
             else:
                 _valid_actions = None
-            
-            # Only when the stop is a timepoint, but i need the event here
-            if update_event and (update_event.time >= timepoint_array[self.num_decision_epochs]):
-                chosen_action = self.event_processing_callback(_valid_actions, self.state)
-                self.num_decision_epochs += 1
-                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-            elif update_event and (update_event.event_type == EventType.VEHICLE_BREAKDOWN):
-                chosen_action = self.event_processing_callback(_valid_actions, self.state)
-                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-            else:
-                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
-            if chosen_action:
-                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
-            
-                for event in new_events:
-                    self.add_event(event)
+            if self.state.time >= timepoint_array[self.num_decision_epochs]:
+                self.num_decision_epochs += 1
+                chosen_action = self.event_processing_callback(_valid_actions,
+                                                               self.state,
+                                                               action_type=ActionType.OVERLOAD_ALLOCATE)
+                # if chosen_action is None:
+                #     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                # log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                # new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                # for event in new_events:
+                #     self.add_event(event)
+
+            else:
+                chosen_action = self.event_processing_callback(_valid_actions,
+                                                               self.state,
+                                                               action_type=ActionType.OVERLOAD_DISPATCH)
+
+            if chosen_action is None:
+                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+            for event in new_events:
+                self.add_event(event)
+
+            # self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
@@ -133,10 +150,12 @@ class Simulator:
                 for route_id_dir in passenger_waiting:
                     for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
                         remaining += sampled_data['remaining']
-                        ons       += sampled_data['ons']
-                        offs      += sampled_data['offs']
+                        ons += sampled_data['ons']
+                        offs += sampled_data['offs']
                 
-            self.stop_metrics_log.debug(f"{time},{stop_id},{ons},{offs},{remaining}")
+            # self.stop_metrics_log.debug(f"{time},{stop_id},{ons},{offs},{remaining}")
+            self.stop_metrics_log.debug(f"{time},{stop_obj},{ons},{offs},{remaining}")
+
             
         for bus_id, bus_obj in self.state.buses.items():
             status = bus_obj.status
@@ -152,8 +171,11 @@ class Simulator:
             current_stop = bus_obj.current_stop
             time_at_last_stop = bus_obj.time_at_last_stop
             total_passengers_served = bus_obj.total_passengers_served
-            
-            self.bus_metrics_log.debug(f"{time},{bus_id},{status},{bus_type},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served}")
+            capacity = bus_obj.capacity
+            deadkms_moved = bus_obj.total_deadkms_moved
+            servicekms_moved = bus_obj.total_servicekms_moved
+
+            self.bus_metrics_log.debug(f"{time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved},")
 
         
     def print_states(self):

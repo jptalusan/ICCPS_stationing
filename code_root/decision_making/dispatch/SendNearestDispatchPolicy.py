@@ -40,7 +40,8 @@ class SendNearestDispatchPolicy:
                 next_stop = state.buses[info].current_stop
                 
             # elif action_type == ActionType.OVERLOAD_DISPATCH:
-            #     next_stop = info[0]
+                # next_stop = info[0]
+                # pass
             # elif action_type == ActionType.OVERLOAD_ALLOCATE:
             #     next_stop = info
             #     pass
@@ -56,4 +57,5 @@ class SendNearestDispatchPolicy:
         
         actions_with_distance = sorted(actions_with_distance, key=lambda x: x[1], reverse=False)
         # print(actions_with_distance)
-        return actions_with_distance[0][0]
+        actions_with_distance = actions_with_distance[0][0]
+        return actions_with_distance

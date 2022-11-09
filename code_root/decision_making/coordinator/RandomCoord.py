@@ -1,5 +1,5 @@
 from src.utils import *
-import random
+from Environment.enums import ActionType
 
 # Limit dispatch to 1 overload bus per trip/route_id_dir
 # Allocate to depot and activate buses
@@ -22,12 +22,13 @@ class RandomCoord:
 
         pass
     
-    def event_processing_callback_funct(self, actions, state):
+    def event_processing_callback_funct(self, actions, state, action_type=ActionType.OVERLOAD_DISPATCH):
         '''
         function that is called when each new event occurs in the underlying simulation.
-        :param state:
-        :param curr_event:
-        :return: list of Events
+        :param actions
+        :param state
+        :param action_type
+        :return: action
         '''
         if actions is None:
             return None

@@ -42,7 +42,8 @@ def run_low_level_mcts(arg_dict):
                          iter_limit=arg_dict['iter_limit'],
                          allowed_computation_time=arg_dict['allowed_computation_time'],
                          rollout_policy=arg_dict['rollout_policy'],
-                         exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'])
+                         exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'],
+                         action_type=arg_dict['action_type'])
 
     res = solver.solve(arg_dict['current_state'], 
                        arg_dict['bus_arrival_events'], 
@@ -88,19 +89,21 @@ class DecisionMaker:
         self.starting_date = starting_date
         self.time_taken = {}
 
+        self.action_type = None
+
     # Call the MCTS in parallel here
 
     # Check if current stop and scheduled times are timepoints, only do decisions then.
-    def event_processing_callback_funct(self, actions, state):
-
+    def event_processing_callback_funct(self, actions, state, action_type):
         # Only do something when buses are available?
         if self.any_available_overload_buses(state):
+            self.action_type = action_type
             self.event_counter += 1
             chosen_action = self.process_mcts(state)
-
             if chosen_action is None:
                 return None
             return chosen_action
+        # print("no available buses")
         return None
 
     def any_available_overload_buses(self, state):
@@ -111,19 +114,23 @@ class DecisionMaker:
         return num_available_buses > 0
 
     def process_mcts(self, state):
-        ORACLE = True
-
+        ORACLE = False
         if ORACLE:
+            CHAINS = 0
             event_queues = self.load_events(state)
-            passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=0)
+            state = [state]
         else:
+            CHAINS = 4
             event_queues = self.get_event_chains(state)
-            passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=1)
+            event_queues = event_queues * CHAINS
+            state = [state] * CHAINS
+
+        passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=CHAINS)
 
         if len(event_queues[0]) <= 0:
             return None
 
-        result = self.get_action([state], event_queues, passenger_arrival_distribution)
+        result = self.get_action(state, event_queues, passenger_arrival_distribution)
         return result
 
     def get_action(self, states, event_queues, passenger_arrival_distribution):
@@ -144,7 +151,8 @@ class DecisionMaker:
                                           uct_tradeoff=self.uct_tradeoff,
                                           iter_limit=self.iter_limit,
                                           allowed_computation_time=self.allowed_computation_time,
-                                          mcts_type=self.mcts_type)
+                                          mcts_type=self.mcts_type,
+                                          action_type=self.action_type)
 
             for input in inputs:
                 result = run_low_level_mcts(input)
@@ -171,15 +179,18 @@ class DecisionMaker:
                                               'avg_score': np.mean(res['scores'])})
 
                 # We want the actions which result in the least passengers left behind
-                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
+                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
 
             # print(f"DecisionMaker scores:{avg_action_scores}")
 
-            for region_id, action_dict in best_actions.items():
-                for resp_id, action_id in action_dict.items():
-                    final_action[resp_id] = action_id
-        
-        #TODO: Add root parallelization here
+            best_score = 0
+            overall_best_action = None
+            for _, actions in best_actions.items():
+                if actions['avg_score'] >= best_score:
+                    best_score = actions['avg_score']
+                    overall_best_action = actions['action']
+            final_action = overall_best_action
+
         else:
 
             start_pool_time = time.time()
@@ -196,7 +207,8 @@ class DecisionMaker:
                                               uct_tradeoff=self.uct_tradeoff,
                                               iter_limit=self.iter_limit,
                                               allowed_computation_time=self.allowed_computation_time,
-                                              mcts_type=self.mcts_type)
+                                              mcts_type=self.mcts_type,
+                                              action_type=self.action_type)
 
                 # run_start_ = time.time()
                 res_dict = pool.map(run_low_level_mcts, inputs)
@@ -222,13 +234,18 @@ class DecisionMaker:
                                               'avg_score': np.mean(res['scores'])})
 
                 # We want the actions which result in the least passengers left behind
-                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
+                # best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
+                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
 
             # print(f"DecisionMaker scores:{avg_action_scores}")
 
-            for region_id, action_dict in best_actions.items():
-                for resp_id, action_id in action_dict.items():
-                    final_action[resp_id] = action_id
+            best_score = 0
+            overall_best_action = None
+            for _, actions in best_actions.items():
+                if actions['avg_score'] >= best_score:
+                    best_score = actions['avg_score']
+                    overall_best_action = actions['action']
+            final_action = overall_best_action
         
         self.time_taken['decision_maker'] = time.time() - decision_start
         
@@ -237,7 +254,8 @@ class DecisionMaker:
         time_taken = res_dict[0]['mcts_res']['time_taken']
         
         print(f"Event counter: {self.event_counter}")
-        print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+        print(f"Time: {states[0].time}")
+        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
         [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
@@ -255,12 +273,13 @@ class DecisionMaker:
                         uct_tradeoff,
                         iter_limit,
                         allowed_computation_time,
-                        mcts_type):
+                        mcts_type,
+                        action_type):
         inputs = []
 
         # Based on how many parallel mcts we want
         # QUESTION: Copy? deepcopy? plain?
-        for i in range(1):
+        for i in range(len(states)):
             input_dict = {}
             input_dict['tree_number'] = i
             input_dict['MCTS_type'] = mcts_type
@@ -273,7 +292,7 @@ class DecisionMaker:
             input_dict['bus_arrival_events'] = copy.deepcopy(bus_arrival_events[i])
             input_dict['passenger_arrival_distribution'] = copy.copy(passenger_arrival_distribution[i])
             input_dict['current_state'] = copy.deepcopy(states[i])
-            # input_dict['logger'] = self.logger
+            input_dict['action_type'] = action_type
             inputs.append(input_dict)
 
         return inputs
@@ -332,6 +351,10 @@ class DecisionMaker:
             _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
         else:
             _events = [event for event in state_events if state.time <= event.time]
+
+        #HACK for broken vehicles
+        _events = [event for i, event in enumerate(_events) if event.event_type != EventType.VEHICLE_BREAKDOWN or\
+                   (i == 0)]
             
         event_chains.append(_events)
             

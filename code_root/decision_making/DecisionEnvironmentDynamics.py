@@ -11,6 +11,7 @@ import itertools
 import copy
 import datetime as dt
 
+
 # Should have get possible actions function
 
 
@@ -19,106 +20,103 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
     def __init__(self, travel_model, send_nearest_dispatch, reward_policy=None, logger=None):
         EnvironmentModelFast.__init__(self, travel_model=travel_model, logger=logger)
         self.send_nearest_dispatch = send_nearest_dispatch
-        self.reward_policy         = reward_policy
-        self.travel_model          = travel_model
-        self.logger                = logger
-    
+        self.reward_policy = reward_policy
+        self.travel_model = travel_model
+        self.logger = logger
+
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
-        num_available_buses = len(
-            [_ for _ in state.buses.values()
-             if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION))
-             and _.type == BusType.OVERLOAD])
-        
-        if num_available_buses <= 0:
-            valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
-            action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
-            return valid_actions, action_taken_tracker
-
-        # Passengers left behind (must identify the trips that cover these stops)
-        stops_with_left_behind_passengers = []
-        total_remaining = 0
-        for stop_id, stop_obj in state.stops.items():
-            passenger_waiting = stop_obj.passenger_waiting
-            if not passenger_waiting:
-                continue
-
-            for route_id_dir, route_pw in passenger_waiting.items():
-                if not route_pw:
-                    continue
-
-                for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    block_trip = pw['block_trip']
-
-                    if remaining_passengers > 0:
-                        stops_with_left_behind_passengers.append((stop_id,
-                                                                  route_id_dir,
-                                                                  arrival_time,
-                                                                  remaining_passengers,
-                                                                  block_trip))
-                        # self.trips_already_covered.append(block_trip)
-                        total_remaining += remaining_passengers
-
-        # Find broken buses
-        broken_buses = []
-        for bus_id, bus_obj in state.buses.items():
-            if bus_obj.status == BusStatus.BROKEN:
-                # Without checking if a broken bus has already been covered, we try to cover it again
-                # Leading to null values
-                if bus_obj.current_block_trip is not None:
-                    broken_buses.append(bus_id)
-            pass
-
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and \
-                ((bus_obj.status == BusStatus.IDLE) or \
-                 (bus_obj.status == BusStatus.ALLOCATION)):
+                    ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
                 # Prevent overload from being used when IDLE but has TRIPS left...
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
 
+        if len(idle_overload_buses) <= 0:
+            valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
+            action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
+            return valid_actions, action_taken_tracker
+
         # Create matrix of overload buses, original bus id, block/trips, stop_id
         valid_actions = []
-        
-        if action_type == ActionType.OVERLOAD_ALL:
-            _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
-            _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
 
-            _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
-            _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
-
-            # Allocation
+        if action_type == ActionType.OVERLOAD_ALLOCATE or action_type == ActionType.OVERLOAD_ALL:
             _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
 
-        elif action_type == ActionType.OVERLOAD_TO_BROKEN:
+        if action_type == ActionType.OVERLOAD_DISPATCH or action_type == ActionType.OVERLOAD_ALL:
+            if event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
+                if 'current_block_trip' in event.type_specific_information:
+                    current_block_trip = event.type_specific_information['current_block_trip']
+                    current_stop_number = event.type_specific_information['stop']
+                else:
+                    current_block_trip = state.buses[event.type_specific_information['bus_id']].current_block_trip
+                    current_stop_number = state.buses[event.type_specific_information['bus_id']].current_stop_number
+
+                past_stops = self.travel_model.get_list_of_stops_for_trip(current_block_trip[1], current_stop_number)
+
+                stops_with_left_behind_passengers = []
+                total_remaining = 0
+
+                for stop_id in past_stops:
+                    stop_obj = state.stops[stop_id]
+                    passenger_waiting = stop_obj.passenger_waiting
+                    if not passenger_waiting:
+                        continue
+
+                    for route_id_dir, route_pw in passenger_waiting.items():
+                        if not route_pw:
+                            continue
+
+                        for arrival_time, pw in route_pw.items():
+                            remaining_passengers = pw['remaining']
+                            block_trip = pw['block_trip']
+
+                            if remaining_passengers > 0:
+                                stops_with_left_behind_passengers.append((stop_id,
+                                                                          route_id_dir,
+                                                                          arrival_time,
+                                                                          remaining_passengers,
+                                                                          block_trip))
+                                total_remaining += remaining_passengers
+
+                _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
+                                  stops_with_left_behind_passengers]
+                _valid_actions = list(itertools.product(*_valid_actions))
+                valid_actions.extend(_valid_actions)
+
+        if event.event_type == EventType.VEHICLE_BREAKDOWN:
+            broken_buses = []
+            broken_bus = event.type_specific_information['bus_id']
+            if broken_bus not in broken_buses:
+                broken_buses.append(broken_bus)
+
             _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
             _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
-
-        elif action_type == ActionType.OVERLOAD_DISPATCH:
-            _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
-            _valid_actions = list(itertools.product(*_valid_actions))
-            valid_actions.extend(_valid_actions)
-
-        elif action_type == ActionType.OVERLOAD_ALLOCATE:
-            _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
 
         do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-        
+
         if len(valid_actions) > 0:
             valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
             # Always add do nothing as a possible option
             valid_actions.append(do_nothing_action)
         else:
-        #     # No action
+            # No action
             valid_actions = [do_nothing_action]
-        
+
+        # Constraint on broken bus
+        if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
+            constrained_combo_actions = []
+            for action in valid_actions:
+                _action_type = action['type']
+                if _action_type == ActionType.OVERLOAD_TO_BROKEN:
+                    if action not in constrained_combo_actions:
+                        constrained_combo_actions.append(action)
+            valid_actions = copy.copy(constrained_combo_actions)
+
         action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
         return valid_actions, action_taken_tracker
 
@@ -133,13 +131,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
         # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
         valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
-        
+
         # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and \
-                ((bus_obj.status == BusStatus.IDLE) or \
-                 (bus_obj.status == BusStatus.ALLOCATION)):
+                    ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
 
@@ -154,7 +151,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
     def take_action(self, state, action):
         action_type = action['type']
-        ofb_id      = action['overload_bus']
+        ofb_id = action['overload_bus']
         # ('HILLOMNF', '7_TO DOWNTOWN', datetime.datetime(2021, 8, 23, 14, 13, 11), 8.0, ('5692', '246343'))
 
         new_events = []
@@ -167,15 +164,15 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             action_info = action["info"]
             stop_id = action_info[0]
             current_block_trip = action_info[4]
-            
+
             ofb_obj = state.buses[ofb_id]
             ofb_obj.bus_block_trips = [current_block_trip]
             stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
             ofb_obj.current_stop_number = stop_no
             ofb_obj.status = BusStatus.IN_TRANSIT
-            
+
             ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
-            
+
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
                                                                                   stop_no)
 
@@ -184,14 +181,14 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                                                                                          stop_no)
             ofb_obj.total_deadkms_moved += distance
             log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
-            
+
             time_of_activation = state.time
             time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
             # Buses should start either at the scheduled time, or if they are late, should start as soon as possible.
             time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
             ofb_obj.t_state_change = time_to_state_change
             ofb_obj.time_at_last_stop = time_of_activation
-            
+
             event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                           time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
@@ -237,21 +234,21 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             broken_bus_obj.current_block_trip = None
             broken_bus_obj.bus_block_trips = []
             broken_bus_obj.total_passengers_served -= ofb_obj.current_load
-            
+
             ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
-            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip, 
+            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
                                                                                   ofb_obj.current_stop_number)
-            
+
             travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
-                                                                                         ofb_obj.current_stop, 
+                                                                                         ofb_obj.current_stop,
                                                                                          ofb_obj.current_stop_number)
             ofb_obj.total_deadkms_moved += distance
             log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
-            
+
             time_of_activation = state.time
             time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
             time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
-            
+
             event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                           time=time_to_state_change,
                           type_specific_information={'bus_id': ofb_id,
@@ -265,7 +262,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             action_info = action["info"]
             reallocation_stop = action_info
 
-            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop, state.time)
+            travel_time = self.travel_model.get_travel_time_from_stop_to_stop(current_stop, reallocation_stop,
+                                                                              state.time)
             distance_to_next_stop = self.travel_model.get_distance_from_stop_to_stop(current_stop, reallocation_stop,
                                                                                      state.time)
             time_to_state_change = state.time + dt.timedelta(seconds=travel_time)
@@ -274,7 +272,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             ofb_obj.distance_to_next_stop = distance_to_next_stop
             ofb_obj.time_at_last_stop = state.time
             ofb_obj.status = BusStatus.ALLOCATION
-            
+
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
             new_events = None
@@ -305,12 +303,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #         for arrival_time, pw in route_pw.items():
         #             remaining_passengers = pw['remaining']
         #             total_remaining += remaining_passengers
-        
+
         for _, bus_obj in state.buses.items():
             total_deadkms += bus_obj.total_deadkms_moved
             total_passengers_served += bus_obj.total_passengers_served
             total_aggregate_delay += bus_obj.delay_time
-            
+
             type = bus_obj.type
             status = bus_obj.status
             bus_block_trips = bus_obj.bus_block_trips

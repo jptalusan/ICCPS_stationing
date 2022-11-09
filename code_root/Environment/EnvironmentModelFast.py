@@ -60,6 +60,9 @@ class EnvironmentModelFast:
                 current_block_trip = state.buses[bus_id].current_block_trip
                 bus_block_trips = state.buses[bus_id].bus_block_trips
                 current_stop_number = state.buses[bus_id].current_stop_number
+
+                if current_block_trip is None:
+                    return new_events
                 current_stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
                 last_stop_number = self.travel_model.get_last_stop_number_on_trip(current_block_trip)
 
@@ -251,6 +254,11 @@ class EnvironmentModelFast:
 
         picked_up_list = []
         for_deletion = []
+        got_on_bus = 0
+        ons = 0
+        offs = 0
+        remaining = 0
+
         # TODO: Next time i should just use remaining -> ons
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
@@ -312,11 +320,6 @@ class EnvironmentModelFast:
                     bus_object.total_passengers_served += got_on_bus
                     bus_object.total_stops += 1
 
-                    log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
-arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
-remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
-                    log(self.logger, _new_time, log_str, LogType.INFO)
-
                 # Substitute for the leaving events
                 elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)):
                     sampled_ons = 0
@@ -348,10 +351,10 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                             _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}",
                             LogType.ERROR)
 
-                    log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
+        log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
 arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
-                    log(self.logger, _new_time, log_str, LogType.INFO)
+        log(self.logger, _new_time, log_str, LogType.INFO)
 
         # for deletion in for_deletion:
         #     route_id_dir = deletion[0]
@@ -434,7 +437,6 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             else:
                 ofb_obj.current_stop_number = stop_no - 1
 
-            ofb_obj.t_state_change = state.time
             ofb_obj.status = BusStatus.IN_TRANSIT
 
             # Switch passengers
@@ -459,7 +461,9 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
             time_of_activation = state.time
             time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            # HACK kind of.
             time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
+            ofb_obj.t_state_change = time_to_state_change
 
             event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                           time=time_to_state_change,

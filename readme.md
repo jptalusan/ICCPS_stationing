@@ -101,3 +101,10 @@ EnvironmentalModelFast:258 assert passenger_arrival_time <= bus_arrival_time
 Some uncertainty on the overall passenger count
 * will have to count the actual in the sampled distribution for ALL buses.
 * A bit overhauled the environemtnmodelfast. Passenger pick up. I think it makes sense.
+
+Places where actions are generated/reprocessed. Confusion on list of tuples of dicts or list of dicts.
+1. DecisionEnvironmentDynamics::generate_possible_actions
+2. SendNearestDispatchPolicy::select_overload_to_dispatch
+3. ModularMCTS::pick_expand_action
+4. Simulator::run_simulation
+5. DecisionMaker::get_action
