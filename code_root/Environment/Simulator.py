@@ -83,19 +83,12 @@ class Simulator:
             else:
                 _valid_actions = None
 
-            if self.state.time >= timepoint_array[self.num_decision_epochs]:
+            if update_event and (update_event.time >= timepoint_array[self.num_decision_epochs]):
                 self.num_decision_epochs += 1
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_ALLOCATE)
-                # if chosen_action is None:
-                #     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                # log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-                # new_events, _ = self.environment_model.take_action(self.state, chosen_action)
-                # for event in new_events:
-                #     self.add_event(event)
-
-            else:
+            elif update_event:
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_DISPATCH)
@@ -155,7 +148,6 @@ class Simulator:
                 
             # self.stop_metrics_log.debug(f"{time},{stop_id},{ons},{offs},{remaining}")
             self.stop_metrics_log.debug(f"{time},{stop_obj},{ons},{offs},{remaining}")
-
             
         for bus_id, bus_obj in self.state.buses.items():
             status = bus_obj.status
@@ -177,7 +169,6 @@ class Simulator:
 
             self.bus_metrics_log.debug(f"{time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved},")
 
-        
     def print_states(self):
         LOGTYPE = LogType.INFO
         log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)

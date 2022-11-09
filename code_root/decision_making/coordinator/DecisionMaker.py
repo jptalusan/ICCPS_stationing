@@ -252,10 +252,11 @@ class DecisionMaker:
         sorted_actions = res_dict[0]['mcts_res']['scored_actions']
         sorted_actions.sort(key=lambda _: _['score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
-        
+
+        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
+
         print(f"Event counter: {self.event_counter}")
         print(f"Time: {states[0].time}")
-        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
         [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
@@ -353,8 +354,8 @@ class DecisionMaker:
             _events = [event for event in state_events if state.time <= event.time]
 
         #HACK for broken vehicles
-        _events = [event for i, event in enumerate(_events) if event.event_type != EventType.VEHICLE_BREAKDOWN or\
-                   (i == 0)]
+        # _events = [event for i, event in enumerate(_events) if event.event_type != EventType.VEHICLE_BREAKDOWN or\
+        #            (i == 0)]
             
         event_chains.append(_events)
             

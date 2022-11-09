@@ -1,12 +1,12 @@
 {
     "starting_date_str":"20211018",
-    "minute_interval":60,
-    "iter_limit":200,
+    "minute_interval":15,
+    "iter_limit":100,
     "pool_thread_count": 0,
     "mcts_discount_factor":0.99997,
     "uct_tradeoff":1.44,
     "lookahead_horizon_delta_t":3600,
     "allowed_computation_time":15,
-    "vehicle_count":"2",
+    "vehicle_count":"",
     "mcts_log_name":"MCTS_20211018_2_vehicle.log"
 }

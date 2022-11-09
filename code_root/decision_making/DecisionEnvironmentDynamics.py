@@ -87,12 +87,16 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 _valid_actions = list(itertools.product(*_valid_actions))
                 valid_actions.extend(_valid_actions)
 
-        if event.event_type == EventType.VEHICLE_BREAKDOWN:
-            broken_buses = []
-            broken_bus = event.type_specific_information['bus_id']
-            if broken_bus not in broken_buses:
-                broken_buses.append(broken_bus)
+        broken_buses = []
+        for bus_id, bus_obj in state.buses.items():
+            if bus_obj.status == BusStatus.BROKEN:
+                # Without checking if a broken bus has already been covered, we try to cover it again
+                # Leading to null values
+                if bus_obj.current_block_trip is not None:
+                    broken_buses.append(bus_id)
+            pass
 
+        if len(broken_buses) > 0:
             _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
             _valid_actions = list(itertools.product(*_valid_actions))
             valid_actions.extend(_valid_actions)
@@ -108,14 +112,14 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             valid_actions = [do_nothing_action]
 
         # Constraint on broken bus
-        if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
-            constrained_combo_actions = []
-            for action in valid_actions:
-                _action_type = action['type']
-                if _action_type == ActionType.OVERLOAD_TO_BROKEN:
-                    if action not in constrained_combo_actions:
-                        constrained_combo_actions.append(action)
-            valid_actions = copy.copy(constrained_combo_actions)
+        # if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
+        #     constrained_combo_actions = []
+        #     for action in valid_actions:
+        #         _action_type = action['type']
+        #         if _action_type == ActionType.OVERLOAD_TO_BROKEN:
+        #             if action not in constrained_combo_actions:
+        #                 constrained_combo_actions.append(action)
+        #     valid_actions = copy.copy(constrained_combo_actions)
 
         action_taken_tracker = [(_[0], False) for _ in enumerate(valid_actions)]
         return valid_actions, action_taken_tracker
