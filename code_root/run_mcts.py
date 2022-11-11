@@ -238,7 +238,7 @@ if __name__ == '__main__':
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                  buses=Buses,
                                                  bus_id='140',
-                                                 time=str_timestamp_to_datetime('2021-10-18 05:16:00'))
+                                                 time=str_timestamp_to_datetime('2021-10-18 05:17:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -280,6 +280,7 @@ if __name__ == '__main__':
                                    lookahead_horizon_delta_t=lookahead_horizon_delta_t,
                                    allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
                                    starting_date=starting_date_str,
+                                   oracle=config['oracle']
                                    )
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(bus_arrival_events),

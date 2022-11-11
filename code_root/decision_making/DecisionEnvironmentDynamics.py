@@ -10,7 +10,7 @@ from Environment.enums import EventType
 import itertools
 import copy
 import datetime as dt
-
+import time
 
 # Should have get possible actions function
 
@@ -29,7 +29,9 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and \
-                    ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
+                    ((bus_obj.status == BusStatus.IDLE)
+                     or (bus_obj.status == BusStatus.ALLOCATION)
+                    ):
                 # Prevent overload from being used when IDLE but has TRIPS left...
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
@@ -58,7 +60,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 past_stops = self.travel_model.get_list_of_stops_for_trip(current_block_trip[1], current_stop_number)
 
                 stops_with_left_behind_passengers = []
-                total_remaining = 0
 
                 for stop_id in past_stops:
                     stop_obj = state.stops[stop_id]
@@ -80,7 +81,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                                                                           arrival_time,
                                                                           remaining_passengers,
                                                                           block_trip))
-                                total_remaining += remaining_passengers
 
                 _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
                                   stops_with_left_behind_passengers]
@@ -140,7 +140,9 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and \
-                    ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
+                    ((bus_obj.status == BusStatus.IDLE)
+                     or (bus_obj.status == BusStatus.ALLOCATION)
+                    ):
                 if len(bus_obj.bus_block_trips) <= 0:
                     idle_overload_buses.append(bus_id)
 
@@ -239,7 +241,21 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             broken_bus_obj.bus_block_trips = []
             broken_bus_obj.total_passengers_served -= ofb_obj.current_load
 
-            ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
+            # Prevent a late dispatch of bus to serve a very stale trip
+            trip_start_time = dt.datetime.combine(state.time.date(), dt.time(0, 0, 0))
+            moves = 0
+            while trip_start_time < state.time:
+                if len(ofb_obj.bus_block_trips) > 0:
+                    current_block_trip = ofb_obj.bus_block_trips.pop(0)
+                    ofb_obj.current_block_trip = current_block_trip
+                    trip_start_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, 0)
+                else:
+                    return new_events
+                moves += 1
+            if moves > 0:
+                ofb_obj.current_stop_number = 0
+                
+            # ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
                                                                                   ofb_obj.current_stop_number)
 
@@ -279,7 +295,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
         elif ActionType.NO_ACTION == action_type:
             # Do nothing
-            new_events = None
+            pass
 
         reward = self.compute_reward(state)
         return reward, new_events, state.time

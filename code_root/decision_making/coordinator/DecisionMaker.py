@@ -69,7 +69,8 @@ class DecisionMaker:
                  iter_limit,
                  lookahead_horizon_delta_t,
                  allowed_computation_time,
-                 starting_date):
+                 starting_date,
+                 oracle):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -85,7 +86,8 @@ class DecisionMaker:
         self.iter_limit = iter_limit
         self.allowed_computation_time  = allowed_computation_time
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
-        
+        self.oracle = oracle
+
         self.starting_date = starting_date
         self.time_taken = {}
 
@@ -109,12 +111,16 @@ class DecisionMaker:
     def any_available_overload_buses(self, state):
         num_available_buses = len(
             [_ for _ in state.buses.values()
-             if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION))
+             if (
+                     (_.status == BusStatus.IDLE)
+                     or
+                     (_.status == BusStatus.ALLOCATION)
+                 )
              and _.type == BusType.OVERLOAD])
         return num_available_buses > 0
 
     def process_mcts(self, state):
-        ORACLE = False
+        ORACLE = self.oracle
         if ORACLE:
             CHAINS = 0
             event_queues = self.load_events(state)
@@ -352,10 +358,6 @@ class DecisionMaker:
             _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
         else:
             _events = [event for event in state_events if state.time <= event.time]
-
-        #HACK for broken vehicles
-        # _events = [event for i, event in enumerate(_events) if event.event_type != EventType.VEHICLE_BREAKDOWN or\
-        #            (i == 0)]
             
         event_chains.append(_events)
             

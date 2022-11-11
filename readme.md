@@ -108,3 +108,12 @@ Places where actions are generated/reprocessed. Confusion on list of tuples of d
 3. ModularMCTS::pick_expand_action
 4. Simulator::run_simulation
 5. DecisionMaker::get_action
+
+Do overflow buses also causes decision epochs?
+The reason why the rollout time grows as time passes is that more buses are active.
+Problem: Buses keep getting assigned to the same trip even when others are assigned to it already.
+    - can handle with rollouts, but will increaese time.
+problem: How to decrease rollout time? how to approximate the state updates?
+Question: Should the rollout still be generating new events? (i think yes.)
+    - But the issue is even though i set a horizon limit, i still generate all the new events until the end?! (of at least the buses in the truncated events)
+    - i should limit this new events to within the horizon too!

@@ -84,7 +84,7 @@ class ModularMCTS:
                 self.execute_iteration(root)
                 # print(f"MCTS {iter_count}")
 
-        # print(f"MCTS solve(), {len(possible_actions)} possible actions.")
+        print(f"MCTS solve(), {len(possible_actions)} possible actions.")
 
         if len(root.children) == 0:
             root.is_terminal = False

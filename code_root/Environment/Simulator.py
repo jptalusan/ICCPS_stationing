@@ -69,7 +69,6 @@ class Simulator:
         self.start_sim_time = time.time()
 
         # initialize state
-        chosen_action = None
         update_event = None
         
         # Initialize timepoints (N minute intervals)
@@ -78,6 +77,7 @@ class Simulator:
         while len(self.event_queue) > 0:
             self.update_sim_info()
 
+            chosen_action = None
             if self.valid_actions is not None:
                 _valid_actions = self.valid_actions.get_valid_actions(self.state)
             else:
@@ -88,19 +88,24 @@ class Simulator:
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_ALLOCATE)
-            elif update_event:
+                if chosen_action is None:
+                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                for event in new_events:
+                    self.add_event(event)
+
+            if update_event:
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_DISPATCH)
 
-            if chosen_action is None:
-                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-            new_events, _ = self.environment_model.take_action(self.state, chosen_action)
-            for event in new_events:
-                self.add_event(event)
-
-            # self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                if chosen_action is None:
+                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                for event in new_events:
+                    self.add_event(event)
 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
@@ -111,8 +116,7 @@ class Simulator:
                 
             # self.save_visualization(update_event.time, granularity_s=None)
             
-            # self.log_metrics()
-            # print(f"Events left: {len(self.event_queue)}")
+            self.log_metrics()
         print("Done")
             
         self.print_states()
@@ -133,22 +137,11 @@ class Simulator:
         self.event_queue.sort(key=lambda _: _.time, reverse=False)
         
     def log_metrics(self):
-        time = self.state.time
+        log_time = self.state.time
         for stop_id, stop_obj in self.state.stops.items():
-            passenger_waiting = stop_obj.passenger_waiting
-            ons = 0
-            offs = 0
-            remaining = 0
-            if passenger_waiting:
-                for route_id_dir in passenger_waiting:
-                    for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
-                        remaining += sampled_data['remaining']
-                        ons += sampled_data['ons']
-                        offs += sampled_data['offs']
-                
-            # self.stop_metrics_log.debug(f"{time},{stop_id},{ons},{offs},{remaining}")
-            self.stop_metrics_log.debug(f"{time},{stop_obj},{ons},{offs},{remaining}")
-            
+            if stop_obj.passenger_waiting:
+                self.stop_metrics_log.debug(f"{log_time},{stop_obj}")
+
         for bus_id, bus_obj in self.state.buses.items():
             status = bus_obj.status
             bus_type = bus_obj.type
@@ -167,7 +160,7 @@ class Simulator:
             deadkms_moved = bus_obj.total_deadkms_moved
             servicekms_moved = bus_obj.total_servicekms_moved
 
-            self.bus_metrics_log.debug(f"{time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved},")
+            self.bus_metrics_log.debug(f"{log_time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved},")
 
     def print_states(self):
         LOGTYPE = LogType.INFO
