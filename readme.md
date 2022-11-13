@@ -117,3 +117,11 @@ problem: How to decrease rollout time? how to approximate the state updates?
 Question: Should the rollout still be generating new events? (i think yes.)
     - But the issue is even though i set a horizon limit, i still generate all the new events until the end?! (of at least the buses in the truncated events)
     - i should limit this new events to within the horizon too!
+
+
+# TODO:
+0. Set up baseline (greedy, send nearest)
+1. Set up custom interval events (which control when simulator will use decision maker)
+2. Setup combinatorial with intervals
+    * Decide which trip/trips to send overload buses to
+    * Next action, decide which bus to send to which trip/trips (start with nearest (iterative))

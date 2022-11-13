@@ -18,7 +18,7 @@ class Simulator:
                  passenger_arrival_distribution,
                  valid_actions,
                  logger,
-                 minute_interval,
+                 use_intervals,
                  log_name) -> None:
         
         self.state = starting_state
@@ -31,8 +31,7 @@ class Simulator:
         self.start_sim_time = None
         self.starting_num_events = len(starting_event_queue)
         self.num_events_processed = 0
-        self.num_decision_epochs = 0
-        self.minute_interval = minute_interval
+        self.use_intervals = use_intervals
         self.log_name = log_name
 
         spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
@@ -71,9 +70,6 @@ class Simulator:
         # initialize state
         update_event = None
         
-        # Initialize timepoints (N minute intervals)
-        timepoint_array = self.generate_timepoints(self.event_queue, minute_intervals=self.minute_interval)
-        
         while len(self.event_queue) > 0:
             self.update_sim_info()
 
@@ -83,8 +79,9 @@ class Simulator:
             else:
                 _valid_actions = None
 
-            if update_event and (update_event.time >= timepoint_array[self.num_decision_epochs]):
-                self.num_decision_epochs += 1
+            if (update_event) and \
+               (update_event.event_type == EventType.DECISION_INTERVAL_EVENT) and \
+               (self.use_intervals):
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_ALLOCATE)
@@ -122,13 +119,6 @@ class Simulator:
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
         
-    def generate_timepoints(self, event_queue, minute_intervals=15):
-        start_time = event_queue[0].time
-        base_time = start_time.replace(minute=0, second=0, microsecond=0)
-        end_time = start_time.replace(hour=2, minute=0, second=0, microsecond=0) + dt.timedelta(days=1)
-        time_array = np.arange(base_time, end_time, np.timedelta64(minute_intervals, 'm'))
-        return time_array
-        
     def update_sim_info(self):
         self.num_events_processed += 1
         
@@ -165,7 +155,6 @@ class Simulator:
     def print_states(self):
         LOGTYPE = LogType.INFO
         log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)
-        log(self.logger, dt.datetime.now(), f"Total decision epochs: {self.num_decision_epochs}", LOGTYPE)
         for bus_id, bus_obj in self.state.buses.items():
             log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)

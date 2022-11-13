@@ -457,7 +457,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                     ofb_obj.current_block_trip = current_block_trip
                     trip_start_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, 0)
                 else:
-                    return new_events
+                    return new_events, state.time
                 moves += 1
             if moves > 0:
                 ofb_obj.current_stop_number = 0

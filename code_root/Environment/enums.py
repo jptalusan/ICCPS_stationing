@@ -24,6 +24,7 @@ class EventType(Enum):
     PASSENGER_ARRIVE_STOP = 'passenger_arrive_stop'
     PASSENGER_LEAVE_STOP = 'passenger_leave_stop'
     CONGESTION_LEVEL_CHANGE = 'congestion_level_change'
+    DECISION_INTERVAL_EVENT = 'decision_interval_event'
 
 
 class ActionType(Enum):

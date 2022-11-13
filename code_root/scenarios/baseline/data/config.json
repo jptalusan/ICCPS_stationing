@@ -1,13 +1,13 @@
 {
     "starting_date_str":"20211018",
-    "minute_interval":15,
-    "iter_limit":100,
-    "pool_thread_count": 0,
+    "use_intervals":true,
+    "iter_limit":200,
+    "pool_thread_count": 4,
     "mcts_discount_factor":0.99997,
     "uct_tradeoff":1.44,
-    "lookahead_horizon_delta_t":1800,
+    "lookahead_horizon_delta_t":3600,
     "allowed_computation_time":15,
-    "vehicle_count":"",
-    "mcts_log_name":"MCTS_20211018_ALL_vehicle_NEW.log",
-    "oracle": true
+    "vehicle_count":"10",
+    "mcts_log_name":"SCENARIO_1_10Buses_200ITER_4THREAD_NOTORACLE.log",
+    "oracle": false
 }

@@ -345,7 +345,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        (-5 * total_aggregate_delay)
         # return total_passengers_served
         # return total_passengers_served + (-0.2 * total_deadkms) + (-100 * total_broken_buses) + (-0.2 * total_aggregate_delay)
-        return total_passengers_served - (0.2 * total_deadkms)
+        return total_passengers_served - total_deadkms
         # return 2 * total_passengers_served + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)

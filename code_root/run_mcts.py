@@ -1,5 +1,6 @@
 # All dates and times should just be datetime!
 from decision_making.coordinator.DecisionMaker import DecisionMaker
+from decision_making.coordinator.GreedyCoordinator import GreedyCoordinator
 from decision_making.coordinator.RandomCoord import RandomCoord
 from decision_making.dispatch.RandomDispatch import RandomDispatch
 from decision_making.dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
@@ -29,7 +30,7 @@ import pandas as pd
 import spdlog as spd
 import datetime as dt
 import sys
-
+import smtplib
 
 def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
     print("Loading initial states...")
@@ -166,6 +167,40 @@ def manually_insert_disruption(events, buses, bus_id, time):
     events.sort(key=lambda x: x.time, reverse=False)
     return events
 
+def manually_insert_interval_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
+    earliest_datetime = starting_date + dt.timedelta(days=2)
+    latest_datetime = starting_date
+    for bus_id, bus_obj in buses.items():
+        if bus_obj.type == BusType.OVERLOAD:
+            continue
+        
+        bus_block_trips = bus_obj.bus_block_trips + [bus_obj.current_block_trip]
+        for bbt in bus_block_trips:
+            trip = bbt[1]
+            plan = trip_plan[trip]
+            schedule = plan['scheduled_time']
+            first_stop = str_timestamp_to_datetime(schedule[0])
+            last_stop = str_timestamp_to_datetime(schedule[-1])
+            if first_stop <= earliest_datetime:
+                earliest_datetime = first_stop
+            if last_stop >= latest_datetime:
+                latest_datetime = last_stop
+    earliest_datetime = earliest_datetime.replace(minute=0, second=0, microsecond=0)
+    if latest_datetime.hour < 23:
+        latest_datetime = latest_datetime.replace(hour=latest_datetime.hour+1, minute=0, second=0, microsecond=0)
+    else:
+        latest_datetime = latest_datetime.replace(hour=latest_datetime.hour, minute=59, second=0, microsecond=0)
+        
+    datetime_range = pd.date_range(earliest_datetime, latest_datetime, freq=f"{intervals}min")
+    # datetime_range = np.arange(earliest_datetime, latest_datetime, np.timedelta64(intervals, 'm'))
+    for _dt in datetime_range:
+        event = Event(event_type=EventType.DECISION_INTERVAL_EVENT,
+                      time=_dt,
+                      type_specific_information={'bus_id': bus_id})
+        bus_arrival_events.append(event)
+
+    bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
+    return bus_arrival_events
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -233,19 +268,22 @@ if __name__ == '__main__':
 
     bus_arrival_events = load_events(travel_model, starting_date_str, Buses, Stops, trip_plan)
 
-    # HACK:
+    # HACK: Start
     # Injecting incident
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                  buses=Buses,
                                                  bus_id='140',
-                                                 time=str_timestamp_to_datetime('2021-10-18 05:17:00'))
+                                                 time=str_timestamp_to_datetime('2021-10-18 07:36:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
     with open(f'scenarios/baseline/data/sampled_ons_offs_dict_{starting_date_str}.pkl', 'rb') as handle:
         passenger_arrival_distribution = pickle.load(handle)
     
-    # END HACK
+    # Adding interval events
+    if config["use_intervals"]:
+        bus_arrival_events = manually_insert_interval_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+    # HACK: End
 
     starting_state = copy.deepcopy(State(stops=Stops, 
                                          buses=Buses, 
@@ -255,7 +293,7 @@ if __name__ == '__main__':
     mcts_discount_factor = config["mcts_discount_factor"]
     # mcts_discount_factor = 1
     rollout_policy = BareMinimumRollout()
-    lookahead_horizon_delta_t = 60 * 60 * 1  # 60*60*N for N hour horizon
+    lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
     # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = config["uct_tradeoff"]
     pool_thread_count = config["pool_thread_count"]
@@ -282,6 +320,9 @@ if __name__ == '__main__':
                                    starting_date=starting_date_str,
                                    oracle=config['oracle']
                                    )
+    
+    # decision_maker = GreedyCoordinator(travel_model=travel_model,
+    #                                    dispatch_policy=dispatch_policy)
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(bus_arrival_events),
                           starting_state=starting_state,
@@ -290,9 +331,27 @@ if __name__ == '__main__':
                           passenger_arrival_distribution=passenger_arrival_distribution,
                           valid_actions=valid_actions,
                           logger=logger,
-                          minute_interval=config['minute_interval'],
+                          use_intervals=config['use_intervals'],
                           log_name=config["mcts_log_name"])
 
     simulator.run_simulation()
 
     # sys.stdout.close()
+    smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
+    # start TLS for security which makes the connection more secure
+    smtpobj.starttls()
+    senderemail_id="jptalusan@gmail.com"
+    senderemail_id_password="bhgbzkzzwgrhnpji"
+    receiveremail_id="jptalusan@gmail.com"
+    # Authentication for signing to gmail account
+    smtpobj.login(senderemail_id, senderemail_id_password)
+    # message to be sent
+    # message = f"Finished running: {config['mcts_log_name']} on digital-storm-1."
+    SUBJECT = f"DONE with {config['mcts_log_name']}"
+    message = 'Subject: {}\n\n{}'.format(SUBJECT, "Testing done on digital-storm-1")
+    
+    # sending the mail - passing 3 arguments i.e sender address, receiver address and the message
+    smtpobj.sendmail(senderemail_id,receiveremail_id, message)
+    # Hereby terminate the session
+    smtpobj.quit()
+    print("mail send - Using simple text message")
