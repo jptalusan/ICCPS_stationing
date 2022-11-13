@@ -31,6 +31,7 @@ class Simulator:
         self.start_sim_time = None
         self.starting_num_events = len(starting_event_queue)
         self.num_events_processed = 0
+        self.decision_events = 0
         self.use_intervals = use_intervals
         self.log_name = log_name
 
@@ -91,6 +92,7 @@ class Simulator:
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
                     self.add_event(event)
+                self.decision_events += 1
 
             if update_event:
                 chosen_action = self.event_processing_callback(_valid_actions,
@@ -103,6 +105,7 @@ class Simulator:
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
                     self.add_event(event)
+                self.decision_events += 1
 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
@@ -155,6 +158,7 @@ class Simulator:
     def print_states(self):
         LOGTYPE = LogType.INFO
         log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)
+        log(self.logger, dt.datetime.now(), f"Total decision epochs: {self.decision_events}", LOGTYPE)
         for bus_id, bus_obj in self.state.buses.items():
             log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--", LOGTYPE)
             log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)

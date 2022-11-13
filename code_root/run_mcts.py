@@ -14,7 +14,7 @@ from Environment.DataStructures.State import State
 from Environment.DataStructures.Stop import Stop
 # from Environment.EmpiricalTravelModel import EmpiricalTravelModel
 from Environment.EmpiricalTravelModelLookup import EmpiricalTravelModelLookup
-from Environment.enums import BusStatus, BusType, EventType, MCTSType
+from Environment.enums import BusStatus, BusType, EventType, MCTSType, LogType
 from Environment.EnvironmentModel import EnvironmentModel
 from Environment.EnvironmentModelFast import EnvironmentModelFast
 from Environment.Simulator import Simulator
@@ -202,6 +202,26 @@ def manually_insert_interval_events(bus_arrival_events, starting_date, buses, tr
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     return bus_arrival_events
 
+def send_email(config):
+    smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
+    # start TLS for security which makes the connection more secure
+    smtpobj.starttls()
+    senderemail_id="jptalusan@gmail.com"
+    senderemail_id_password="bhgbzkzzwgrhnpji"
+    receiveremail_id="jptalusan@gmail.com"
+    # Authentication for signing to gmail account
+    smtpobj.login(senderemail_id, senderemail_id_password)
+    # message to be sent
+    # message = f"Finished running: {config['mcts_log_name']} on digital-storm-1."
+    SUBJECT = f"DONE with {config['mcts_log_name']}"
+    message = 'Subject: {}\n\n{}'.format(SUBJECT, "Testing done on digital-storm-1")
+    
+    # sending the mail - passing 3 arguments i.e sender address, receiver address and the message
+    smtpobj.sendmail(senderemail_id,receiveremail_id, message)
+    # Hereby terminate the session
+    smtpobj.quit()
+    print("mail send - Using simple text message")
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log_level', type=str, default='DEBUG')
@@ -217,7 +237,7 @@ if __name__ == '__main__':
     # sys.stdout = open(f'console_logs_{datetime_str}.log', 'w')
     
     # spd.FileLogger(name='test', filename=f'logs/REAL_{datetime_str}.log', truncate=True)
-    spd.FileLogger(name='test', filename=f'logs/{datetime_str}_{config["mcts_log_name"]}', truncate=True)
+    spd.FileLogger(name='test', filename=f'logs/{datetime_str}_{config["mcts_log_name"]}.log', truncate=True)
     logger = spd.get('test')
     logger.set_pattern("[%l] %v")
     # logger = None
@@ -282,7 +302,11 @@ if __name__ == '__main__':
     
     # Adding interval events
     if config["use_intervals"]:
+        before_count = len(bus_arrival_events)
         bus_arrival_events = manually_insert_interval_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+        after_count = len(bus_arrival_events)
+        
+        log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count-before_count}", LogType.INFO)
     # HACK: End
 
     starting_state = copy.deepcopy(State(stops=Stops, 
@@ -337,21 +361,5 @@ if __name__ == '__main__':
     simulator.run_simulation()
 
     # sys.stdout.close()
-    smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
-    # start TLS for security which makes the connection more secure
-    smtpobj.starttls()
-    senderemail_id="jptalusan@gmail.com"
-    senderemail_id_password="bhgbzkzzwgrhnpji"
-    receiveremail_id="jptalusan@gmail.com"
-    # Authentication for signing to gmail account
-    smtpobj.login(senderemail_id, senderemail_id_password)
-    # message to be sent
-    # message = f"Finished running: {config['mcts_log_name']} on digital-storm-1."
-    SUBJECT = f"DONE with {config['mcts_log_name']}"
-    message = 'Subject: {}\n\n{}'.format(SUBJECT, "Testing done on digital-storm-1")
     
-    # sending the mail - passing 3 arguments i.e sender address, receiver address and the message
-    smtpobj.sendmail(senderemail_id,receiveremail_id, message)
-    # Hereby terminate the session
-    smtpobj.quit()
-    print("mail send - Using simple text message")
+    # send_email(config)

@@ -104,11 +104,14 @@ class BareMinimumRollout:
                 if bus_obj.status == BusStatus.BROKEN:
                     if bus_obj.current_block_trip is not None:
                         broken_buses.append(bus_id)
-            valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
-            valid_actions = list(itertools.product(*valid_actions))
-            random.seed(100)
-            action_to_take = random.choice(valid_actions)
-            action_to_take = {'type': action_to_take[0], 'overload_bus': action_to_take[1], 'info': action_to_take[2]}
+            if len(idle_overload_buses) > 0:
+                valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
+                valid_actions = list(itertools.product(*valid_actions))
+                random.seed(100)
+                action_to_take = random.choice(valid_actions)
+                action_to_take = {'type': action_to_take[0], 'overload_bus': action_to_take[1], 'info': action_to_take[2]}
+            else:
+                action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
         else:
             action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
