@@ -260,6 +260,8 @@ if __name__ == '__main__':
     with open(config_path) as f:
         trip_plan = json.load(f)
 
+    log(logger, dt.datetime.now(), json.dumps(config), LogType.INFO)
+    
     if vehicle_count != "":
         config_path = f'scenarios/baseline/data/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
     else:
@@ -362,4 +364,4 @@ if __name__ == '__main__':
 
     # sys.stdout.close()
     
-    # send_email(config)
+    send_email(config)

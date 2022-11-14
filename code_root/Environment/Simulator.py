@@ -88,6 +88,8 @@ class Simulator:
                                                                action_type=ActionType.OVERLOAD_ALLOCATE)
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                    
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
@@ -101,6 +103,8 @@ class Simulator:
 
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                    
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
