@@ -11,6 +11,7 @@ import itertools
 import copy
 import datetime as dt
 import time
+import numpy as np
 
 # Should have get possible actions function
 
@@ -121,7 +122,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             valid_actions = [do_nothing_action]
 
         # Constraint on broken bus
-        # if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
+        # if len(broken_buses) > 0:
+        # # if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
         #     constrained_combo_actions = []
         #     for action in valid_actions:
         #         _action_type = action['type']
@@ -241,7 +243,10 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             ofb_obj.status = BusStatus.IN_TRANSIT
 
             # Switch passengers
-            ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
+            if copy.copy(broken_bus_obj.current_load) >= ofb_obj.capacity:
+                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load) - ofb_obj.capacity
+            else:
+                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
             ofb_obj.total_passengers_served += ofb_obj.current_load
 
             # Deactivate broken_bus_obj
@@ -357,7 +362,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         #        (-5 * total_aggregate_delay)
         # return total_passengers_served
         # return total_passengers_served + (-0.2 * total_deadkms) + (-100 * total_broken_buses) + (-0.2 * total_aggregate_delay)
-        return total_passengers_served - total_deadkms
+        return total_passengers_served + (-0.2 * total_deadkms)
         # return 2 * total_passengers_served + (-10 * total_deadkms)
 
     # TODO: Not sure if this is too hacky or just right (i feel too hacky)

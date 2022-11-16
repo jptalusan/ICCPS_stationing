@@ -195,11 +195,11 @@ class EmpiricalTravelModelLookup:
             return True
 
         if curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
-            bus_id = info['bus_id']
+            # bus_id = info['bus_id']
             current_block_trip = info['current_block_trip']
             current_trip = current_block_trip[1]
             current_stop_number = info['stop']
-            bus_object = state.buses[bus_id]
+            # bus_object = state.buses[bus_id]
             current_stop_id = self.get_stop_id_at_number(current_block_trip, current_stop_number)
             scheduled_time = str_timestamp_to_datetime(self.trip_plan[current_trip]['scheduled_time'][current_stop_number])
 

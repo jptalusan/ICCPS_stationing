@@ -450,7 +450,10 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             ofb_obj.status = BusStatus.IN_TRANSIT
 
             # Switch passengers
-            ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
+            if copy.copy(broken_bus_obj.current_load) >= ofb_obj.capacity:
+                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load) - ofb_obj.capacity
+            else:
+                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
             ofb_obj.total_passengers_served += ofb_obj.current_load
 
             # Deactivate broken_bus_obj

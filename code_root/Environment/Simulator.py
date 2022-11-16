@@ -44,7 +44,7 @@ class Simulator:
         self.stop_metrics_log = spd.get('stop_metrics')
         self.stop_metrics_log.set_pattern("%v")
         self.stop_metrics_log.set_level(spd.LogLevel.DEBUG)
-        self.stop_metrics_log.debug(f"state_time,stop_id,total_ons,total_offs,total_walkaway,ons,offs,remaining")
+        self.stop_metrics_log.debug(f"state_time,stop_id,arrival_time,got_on_bus,remaining,block,trip,ons,offs,total_ons,total_offs,total_walkaway")
         
         spd.FileLogger(name='bus_metrics', filename=f'logs/bus_metrics_{self.log_name}.csv', truncate=True)
         self.bus_metrics_log = spd.get('bus_metrics')
@@ -88,7 +88,6 @@ class Simulator:
                     self.decide_and_take_actions_2A(update_event, _valid_actions)
             elif self.config["method"] == "baseline":
                 self.decide_and_take_actions_baseline(update_event, _valid_actions)
-                
 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
@@ -99,7 +98,7 @@ class Simulator:
                 
             # self.save_visualization(update_event.time, granularity_s=None)
             
-            # self.log_metrics()
+            self.log_metrics()
         print("Done")
             
         self.print_states()
@@ -157,7 +156,12 @@ class Simulator:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
                         
                 self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                
+                if self.environment_model.travel_model.is_event_a_timepoint(update_event, self.state):
+                    log(self.logger, self.state.time, f"At time point.", LogType.DEBUG)
+                    
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                    
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
                     self.add_event(event)
@@ -264,7 +268,17 @@ class Simulator:
         log_time = self.state.time
         for stop_id, stop_obj in self.state.stops.items():
             if stop_obj.passenger_waiting:
-                self.stop_metrics_log.debug(f"{log_time},{stop_obj}")
+                # self.stop_metrics_log.debug(f"{log_time},{stop_obj}")
+                for route_id, v in stop_obj.passenger_waiting.items():
+                    for arrival_time, w in v.items():
+                        got_on_bus = w['got_on_bus']
+                        remaining = w['remaining']
+                        block = w['block_trip'][0]
+                        trip = w['block_trip'][1]
+                        ons = w['ons']
+                        offs = w['offs']
+                        output = f"{stop_id},{arrival_time},{got_on_bus},{remaining},{block},{trip},{ons},{offs},{stop_obj.total_passenger_ons},{stop_obj.total_passenger_offs},{stop_obj.total_passenger_walk_away}"
+                        self.stop_metrics_log.debug(f"{log_time},{output}")
 
         for bus_id, bus_obj in self.state.buses.items():
             status = bus_obj.status

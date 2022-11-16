@@ -328,8 +328,8 @@ if __name__ == '__main__':
     # Injecting incident
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                  buses=Buses,
-                                                 bus_id='140',
-                                                 time=str_timestamp_to_datetime('2021-10-18 05:36:00'))
+                                                 bus_id='2019',
+                                                 time=str_timestamp_to_datetime('2022-03-05 13:15:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system

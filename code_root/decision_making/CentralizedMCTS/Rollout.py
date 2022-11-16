@@ -15,7 +15,7 @@ class BareMinimumRollout:
 
     def __init__(self):
         self.deep_copy_time = 0
-        self.rollout_horizon_delta_t = 60 * 60 * 0.5  # 60*60*N for N hour horizon (0.6)
+        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon (0.6)
         # self.rollout_horizon_delta_t = None
         
         self.horizon_time_limit = None
@@ -39,6 +39,8 @@ class BareMinimumRollout:
             self.horizon_time_limit = solve_start_time + dt.timedelta(seconds=self.rollout_horizon_delta_t)
             truncated_events = [event for event in truncated_events if
                                 solve_start_time <= event.time <= self.horizon_time_limit]
+        else:
+            self.horizon_time_limit = solve_start_time + dt.timedelta(days=1)
         
         _state = State(
             stops=copy.deepcopy(node.state.stops),

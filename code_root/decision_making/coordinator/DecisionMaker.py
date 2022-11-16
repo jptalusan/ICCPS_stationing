@@ -8,6 +8,7 @@ from Environment.DataStructures.Event import Event
 from Environment.enums import LogType, EventType, BusStatus, BusType
 from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
+import math
 
 """
 Combine the two files here:
@@ -189,7 +190,7 @@ class DecisionMaker:
 
             # print(f"DecisionMaker scores:{avg_action_scores}")
 
-            best_score = 0
+            best_score = -math.inf
             overall_best_action = None
             for _, actions in best_actions.items():
                 if actions['avg_score'] >= best_score:
@@ -245,7 +246,7 @@ class DecisionMaker:
 
             # print(f"DecisionMaker scores:{avg_action_scores}")
 
-            best_score = 0
+            best_score = -math.inf
             overall_best_action = None
             for _, actions in best_actions.items():
                 if actions['avg_score'] >= best_score:
