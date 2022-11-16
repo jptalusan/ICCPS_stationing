@@ -1,12 +1,10 @@
 import copy
 import time
-
-import pandas as pd
 from Environment.enums import BusStatus, BusType, ActionType, EventType
 from src.utils import *
 import datetime as dt
 import spdlog as spd
-import numpy as np
+import pickle
 
 class Simulator:
     
@@ -18,8 +16,7 @@ class Simulator:
                  passenger_arrival_distribution,
                  valid_actions,
                  logger,
-                 use_intervals,
-                 log_name) -> None:
+                 config) -> None:
         
         self.state = starting_state
         self.environment_model = environment_model
@@ -32,8 +29,10 @@ class Simulator:
         self.starting_num_events = len(starting_event_queue)
         self.num_events_processed = 0
         self.decision_events = 0
-        self.use_intervals = use_intervals
-        self.log_name = log_name
+        self.config = config
+        self.use_intervals = config["use_intervals"]
+        self.use_timepoints = config["use_timepoints"]
+        self.log_name = config["mcts_log_name"]
 
         spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
         self.visual_log = spd.get('visualizer')
@@ -80,36 +79,16 @@ class Simulator:
             else:
                 _valid_actions = None
 
-            if (update_event) and \
-               (update_event.event_type == EventType.DECISION_INTERVAL_EVENT) and \
-               (self.use_intervals):
-                chosen_action = self.event_processing_callback(_valid_actions,
-                                                               self.state,
-                                                               action_type=ActionType.OVERLOAD_ALLOCATE)
-                if chosen_action is None:
-                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                    
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
-                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
-                for event in new_events:
-                    self.add_event(event)
-                self.decision_events += 1
-
-            if update_event:
-                chosen_action = self.event_processing_callback(_valid_actions,
-                                                               self.state,
-                                                               action_type=ActionType.OVERLOAD_DISPATCH)
-
-                if chosen_action is None:
-                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                    
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
-                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
-                for event in new_events:
-                    self.add_event(event)
-                self.decision_events += 1
+            if self.config["method"] == "MCTS":
+                if self.config["scenario"] == "1A":
+                    self.decide_and_take_actions_1A(update_event, _valid_actions)
+                elif self.config["scenario"] == "1B":
+                    self.decide_and_take_actions_1B(update_event, _valid_actions)
+                elif self.config["scenario"] == "2A":
+                    self.decide_and_take_actions_2A(update_event, _valid_actions)
+            elif self.config["method"] == "baseline":
+                self.decide_and_take_actions_baseline(update_event, _valid_actions)
+                
 
             update_event = self.event_queue.pop(0)
             new_events = self.environment_model.update(self.state, update_event, self.passenger_arrival_distribution)
@@ -120,12 +99,157 @@ class Simulator:
                 
             # self.save_visualization(update_event.time, granularity_s=None)
             
-            self.log_metrics()
+            # self.log_metrics()
         print("Done")
             
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
         
+    def decide_and_take_actions_baseline(self, update_event, _valid_actions):
+        chosen_action = self.event_processing_callback(_valid_actions,
+                                                       self.state,
+                                                       action_type=ActionType.OVERLOAD_ALL)
+
+        if chosen_action is None:
+            chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                
+        self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+        log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+        new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+        for event in new_events:
+            self.add_event(event)
+        self.decision_events += 1
+        
+    def decide_and_take_actions_1A(self, update_event, _valid_actions):
+        if (update_event) and \
+            (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
+            (self.use_intervals):
+            chosen_action = self.event_processing_callback(_valid_actions,
+                                                           self.state,
+                                                           action_type=ActionType.OVERLOAD_ALLOCATE)
+            if chosen_action is None:
+                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                    
+            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+            for event in new_events:
+                self.add_event(event)
+            self.decision_events += 1
+
+            # Only do decision epochs for regular buses
+        if (update_event) and \
+            (self.use_timepoints) and \
+            ((update_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP) or \
+            (update_event.event_type == EventType.VEHICLE_BREAKDOWN) or \
+            (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND)):
+            bus_id = update_event.type_specific_information.get('bus_id')
+            if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
+                pass
+            elif self.environment_model.travel_model.is_event_a_timepoint(update_event, self.state) or \
+                    update_event.event_type == EventType.PASSENGER_LEFT_BEHIND:
+                chosen_action = self.event_processing_callback(_valid_actions,
+                                                                   self.state,
+                                                                   action_type=ActionType.OVERLOAD_DISPATCH)
+
+                if chosen_action is None:
+                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                        
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                for event in new_events:
+                    self.add_event(event)
+                self.decision_events += 1
+
+    def decide_and_take_actions_1B(self, update_event, _valid_actions):
+        if (update_event) and \
+            (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
+            (self.use_intervals):
+            chosen_action = self.event_processing_callback(_valid_actions,
+                                                           self.state,
+                                                           action_type=ActionType.OVERLOAD_ALLOCATE)
+            if chosen_action is None:
+                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                    
+            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+            for event in new_events:
+                self.add_event(event)
+            self.decision_events += 1
+            
+        if (update_event) and \
+           ((update_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP) or \
+            (update_event.event_type == EventType.VEHICLE_BREAKDOWN) or \
+            (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND)):
+            bus_id = update_event.type_specific_information.get('bus_id')
+            if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
+                pass
+            elif bus_id and \
+                 self.state.buses[bus_id].last_decision_epoch and \
+                 ((self.state.time - self.state.buses[bus_id].last_decision_epoch) < dt.timedelta(minutes=DECISION_INTERVAL)) and \
+                 (update_event.event_type != EventType.PASSENGER_LEFT_BEHIND):
+                pass
+            elif (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND) or \
+                 (self.state.buses[bus_id].last_decision_epoch and \
+                  (self.state.time - self.state.buses[bus_id].last_decision_epoch) >= dt.timedelta(minutes=DECISION_INTERVAL)) or \
+                 (self.state.buses[bus_id].last_decision_epoch is None):
+                chosen_action = self.event_processing_callback(_valid_actions,
+                                                                   self.state,
+                                                                   action_type=ActionType.OVERLOAD_DISPATCH)
+
+                if chosen_action is None:
+                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                        
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                for event in new_events:
+                    self.add_event(event)
+                self.decision_events += 1
+                self.state.buses[bus_id].last_decision_epoch = self.state.time
+        
+    def decide_and_take_actions_2A(self, update_event, _valid_actions):
+        if (update_event) and \
+            (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
+            (self.use_intervals):
+            chosen_action = self.event_processing_callback(_valid_actions,
+                                                           self.state,
+                                                           action_type=ActionType.OVERLOAD_ALLOCATE)
+            if chosen_action is None:
+                chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                    
+            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+            new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+            for event in new_events:
+                self.add_event(event)
+            self.decision_events += 1
+            
+        if (update_event) and \
+           ((update_event.event_type == EventType.DECISION_DISPATCH_EVENT) or \
+            (update_event.event_type == EventType.VEHICLE_BREAKDOWN) or \
+            (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND)):
+            bus_id = update_event.type_specific_information.get('bus_id')
+            if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
+                pass
+            else:
+                chosen_action = self.event_processing_callback(_valid_actions,
+                                                                   self.state,
+                                                                   action_type=ActionType.OVERLOAD_DISPATCH)
+
+                if chosen_action is None:
+                    chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+                        
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
+                new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+                for event in new_events:
+                    self.add_event(event)
+                self.decision_events += 1
+                self.state.buses[bus_id].last_decision_epoch = self.state.time
+
     def update_sim_info(self):
         self.num_events_processed += 1
         

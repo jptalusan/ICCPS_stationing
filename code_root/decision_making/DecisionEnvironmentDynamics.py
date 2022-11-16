@@ -58,7 +58,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     current_stop_number = state.buses[event.type_specific_information['bus_id']].current_stop_number
 
                 past_stops = self.travel_model.get_list_of_stops_for_trip(current_block_trip[1], current_stop_number)
-
                 stops_with_left_behind_passengers = []
 
                 for stop_id in past_stops:
@@ -82,6 +81,16 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                                                                           remaining_passengers,
                                                                           block_trip))
 
+                # If no left behind people, just add current stop visited to actions space
+                if len(stops_with_left_behind_passengers) <= 0:
+                    scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
+                    route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
+                    stops_with_left_behind_passengers.append((past_stops[-1],
+                                                              route_id_dir,
+                                                              scheduled_arrival_time,
+                                                              0,
+                                                              current_block_trip))
+                    
                 _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
                                   stops_with_left_behind_passengers]
                 _valid_actions = list(itertools.product(*_valid_actions))
@@ -242,42 +251,42 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             broken_bus_obj.total_passengers_served -= ofb_obj.current_load
 
             # Prevent a late dispatch of bus to serve a very stale trip
-            trip_start_time = dt.datetime.combine(state.time.date(), dt.time(0, 0, 0))
-            moves = 0
-            no_trips_left = False
-            while trip_start_time < state.time:
-                if len(ofb_obj.bus_block_trips) > 0:
-                    current_block_trip = ofb_obj.bus_block_trips.pop(0)
-                    ofb_obj.current_block_trip = current_block_trip
-                    trip_start_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, 0)
-                else:
-                    no_trips_left = True
-                    break
-                moves += 1
-            if not no_trips_left:
-                if moves > 0:
-                    ofb_obj.current_stop_number = 0
+            # trip_start_time = dt.datetime.combine(state.time.date(), dt.time(0, 0, 0))
+            # moves = 0
+            # no_trips_left = False
+            # while trip_start_time < state.time:
+            #     if len(ofb_obj.bus_block_trips) > 0:
+            #         current_block_trip = ofb_obj.bus_block_trips.pop(0)
+            #         ofb_obj.current_block_trip = current_block_trip
+            #         trip_start_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, 0)
+            #     else:
+            #         no_trips_left = True
+            #         break
+            #     moves += 1
+            # if not no_trips_left:
+            #     if moves > 0:
+            #         ofb_obj.current_stop_number = 0
                     
-                # ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
-                scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
-                                                                                    ofb_obj.current_stop_number)
+            ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
+            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
+                                                                                ofb_obj.current_stop_number)
 
-                travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
-                                                                                            ofb_obj.current_stop,
-                                                                                            ofb_obj.current_stop_number)
-                ofb_obj.total_deadkms_moved += distance
-                log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
+            travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
+                                                                                        ofb_obj.current_stop,
+                                                                                        ofb_obj.current_stop_number)
+            ofb_obj.total_deadkms_moved += distance
+            log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 
-                time_of_activation = state.time
-                time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
-                time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
+            time_of_activation = state.time
+            time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
 
-                event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
-                            time=time_to_state_change,
-                            type_specific_information={'bus_id': ofb_id,
-                                                        'action': ActionType.OVERLOAD_TO_BROKEN})
+            event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
+                        time=time_to_state_change,
+                        type_specific_information={'bus_id': ofb_id,
+                                                    'action': ActionType.OVERLOAD_TO_BROKEN})
 
-                new_events.append(event)
+            new_events.append(event)
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             ofb_obj = state.buses[ofb_id]

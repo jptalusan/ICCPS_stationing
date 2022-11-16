@@ -23,7 +23,8 @@ class Bus:
                  delay_time=0.0,
                  current_load=0,
                  time_at_last_stop=None,
-                 total_stops=1):
+                 total_stops=1,
+                 last_decision_epoch=None):
         self.my_id = my_id
         self.status = status
         self.type = type
@@ -47,6 +48,7 @@ class Bus:
         self.time_at_last_stop = time_at_last_stop
         self.total_service_time = total_service_time
         self.total_stops = total_stops
+        self.last_decision_epoch = last_decision_epoch
         
     def __str__(self):
         return f"{self.my_id},{self.status},{self.current_block_trip}"

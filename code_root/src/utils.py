@@ -5,6 +5,7 @@ from Environment.enums import LogType
 GMT5 = 18000
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 PASSENGER_TIME_TO_LEAVE = 30 #minutes
+DECISION_INTERVAL = 15 #minutes
 EARLY_PASSENGER_DELTA_MIN = 1
 
 

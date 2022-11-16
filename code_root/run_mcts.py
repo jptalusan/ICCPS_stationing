@@ -167,7 +167,8 @@ def manually_insert_disruption(events, buses, bus_id, time):
     events.sort(key=lambda x: x.time, reverse=False)
     return events
 
-def manually_insert_interval_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
+# This is only for global intervals (not per trip)
+def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
     earliest_datetime = starting_date + dt.timedelta(days=2)
     latest_datetime = starting_date
     for bus_id, bus_obj in buses.items():
@@ -185,19 +186,52 @@ def manually_insert_interval_events(bus_arrival_events, starting_date, buses, tr
                 earliest_datetime = first_stop
             if last_stop >= latest_datetime:
                 latest_datetime = last_stop
+                
+    # Use actual times and dont round down/up
     earliest_datetime = earliest_datetime.replace(minute=0, second=0, microsecond=0)
     if latest_datetime.hour < 23:
         latest_datetime = latest_datetime.replace(hour=latest_datetime.hour+1, minute=0, second=0, microsecond=0)
     else:
         latest_datetime = latest_datetime.replace(hour=latest_datetime.hour, minute=59, second=0, microsecond=0)
-        
+
     datetime_range = pd.date_range(earliest_datetime, latest_datetime, freq=f"{intervals}min")
     # datetime_range = np.arange(earliest_datetime, latest_datetime, np.timedelta64(intervals, 'm'))
     for _dt in datetime_range:
-        event = Event(event_type=EventType.DECISION_INTERVAL_EVENT,
-                      time=_dt,
-                      type_specific_information={'bus_id': bus_id})
+        event = Event(event_type=EventType.DECISION_ALLOCATION_EVENT,
+                    time=_dt,
+                    type_specific_information={'bus_id': None})
         bus_arrival_events.append(event)
+
+    bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
+    return bus_arrival_events
+
+# This is only for global intervals (not per trip)
+def manually_insert_dispatch_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
+    earliest_datetime = starting_date + dt.timedelta(days=2)
+    latest_datetime = starting_date
+    for bus_id, bus_obj in buses.items():
+        if bus_obj.type == BusType.OVERLOAD:
+            continue
+        
+        bus_block_trips = bus_obj.bus_block_trips + [bus_obj.current_block_trip]
+        for bbt in bus_block_trips:
+            trip = bbt[1]
+            plan = trip_plan[trip]
+            schedule = plan['scheduled_time']
+            first_stop = str_timestamp_to_datetime(schedule[0])
+            last_stop = str_timestamp_to_datetime(schedule[-1])
+            if first_stop <= earliest_datetime:
+                earliest_datetime = first_stop
+            if last_stop >= latest_datetime:
+                latest_datetime = last_stop
+
+        datetime_range = pd.date_range(earliest_datetime, latest_datetime, freq=f"{intervals}min")
+        # datetime_range = np.arange(earliest_datetime, latest_datetime, np.timedelta64(intervals, 'm'))
+        for _dt in datetime_range:
+            event = Event(event_type=EventType.DECISION_DISPATCH_EVENT,
+                        time=_dt,
+                        type_specific_information={'bus_id': bus_id})
+            bus_arrival_events.append(event)
 
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     return bus_arrival_events
@@ -295,7 +329,7 @@ if __name__ == '__main__':
     bus_arrival_events = manually_insert_disruption(bus_arrival_events,
                                                  buses=Buses,
                                                  bus_id='140',
-                                                 time=str_timestamp_to_datetime('2021-10-18 07:36:00'))
+                                                 time=str_timestamp_to_datetime('2021-10-18 05:36:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
     
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -305,7 +339,9 @@ if __name__ == '__main__':
     # Adding interval events
     if config["use_intervals"]:
         before_count = len(bus_arrival_events)
-        bus_arrival_events = manually_insert_interval_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+        bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+        if config["scenario"] == "2A":
+            bus_arrival_events = manually_insert_dispatch_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
         after_count = len(bus_arrival_events)
         
         log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count-before_count}", LogType.INFO)
@@ -330,25 +366,26 @@ if __name__ == '__main__':
                                                         dispatch_policy,
                                                         logger=None)
     
-    decision_maker = DecisionMaker(environment_model=sim_environment,
-                                   travel_model=travel_model,
-                                   dispatch_policy=None,
-                                   logger=None,
-                                   pool_thread_count=pool_thread_count,
-                                   mcts_type=mcts_type,
-                                   discount_factor=mcts_discount_factor,
-                                   mdp_environment_model=mdp_environment_model,
-                                   rollout_policy=rollout_policy,
-                                   uct_tradeoff=uct_tradeoff,
-                                   iter_limit=iter_limit,
-                                   lookahead_horizon_delta_t=lookahead_horizon_delta_t,
-                                   allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
-                                   starting_date=starting_date_str,
-                                   oracle=config['oracle']
-                                   )
-    
-    # decision_maker = GreedyCoordinator(travel_model=travel_model,
-    #                                    dispatch_policy=dispatch_policy)
+    if config["method"] == 'MCTS':
+        decision_maker = DecisionMaker(environment_model=sim_environment,
+                                    travel_model=travel_model,
+                                    dispatch_policy=None,
+                                    logger=None,
+                                    pool_thread_count=pool_thread_count,
+                                    mcts_type=mcts_type,
+                                    discount_factor=mcts_discount_factor,
+                                    mdp_environment_model=mdp_environment_model,
+                                    rollout_policy=rollout_policy,
+                                    uct_tradeoff=uct_tradeoff,
+                                    iter_limit=iter_limit,
+                                    lookahead_horizon_delta_t=lookahead_horizon_delta_t,
+                                    allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
+                                    starting_date=starting_date_str,
+                                    oracle=config['oracle']
+                                    )
+    elif config["method"] == 'baseline':
+        decision_maker = GreedyCoordinator(travel_model=travel_model,
+                                           dispatch_policy=dispatch_policy)
 
     simulator = Simulator(starting_event_queue=copy.deepcopy(bus_arrival_events),
                           starting_state=starting_state,
@@ -357,11 +394,10 @@ if __name__ == '__main__':
                           passenger_arrival_distribution=passenger_arrival_distribution,
                           valid_actions=valid_actions,
                           logger=logger,
-                          use_intervals=config['use_intervals'],
-                          log_name=config["mcts_log_name"])
+                          config=config)
 
     simulator.run_simulation()
 
     # sys.stdout.close()
     
-    send_email(config)
+    # send_email(config)

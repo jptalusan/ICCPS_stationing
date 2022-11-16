@@ -186,5 +186,25 @@ class EmpiricalTravelModelLookup:
     def get_list_of_stops_for_trip(self, trip, current_stop_number):
         trip_data = self.trip_plan[trip]
         stop_id_original = trip_data['stop_id_original']
-        stop_id_original = stop_id_original[0:current_stop_number]
+        stop_id_original = stop_id_original[0:current_stop_number+1]
         return stop_id_original
+
+    def is_event_a_timepoint(self, curr_event, state):
+        info = curr_event.type_specific_information
+        if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            return True
+
+        if curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
+            bus_id = info['bus_id']
+            current_block_trip = info['current_block_trip']
+            current_trip = current_block_trip[1]
+            current_stop_number = info['stop']
+            bus_object = state.buses[bus_id]
+            current_stop_id = self.get_stop_id_at_number(current_block_trip, current_stop_number)
+            scheduled_time = str_timestamp_to_datetime(self.trip_plan[current_trip]['scheduled_time'][current_stop_number])
+
+            key = (int(current_trip), current_stop_id, scheduled_time)
+            timepoint = self.time_point_dict[key]['timepoint']
+            return timepoint == 1
+
+        return False
