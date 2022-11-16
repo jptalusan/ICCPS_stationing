@@ -147,7 +147,8 @@ class Simulator:
             if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
                 pass
             elif self.environment_model.travel_model.is_event_a_timepoint(update_event, self.state) or \
-                    update_event.event_type == EventType.PASSENGER_LEFT_BEHIND:
+                 update_event.event_type == EventType.PASSENGER_LEFT_BEHIND or \
+                 update_event.event_type == EventType.VEHICLE_BREAKDOWN:
                 chosen_action = self.event_processing_callback(_valid_actions,
                                                                    self.state,
                                                                    action_type=ActionType.OVERLOAD_DISPATCH)
@@ -189,9 +190,11 @@ class Simulator:
             elif bus_id and \
                  self.state.buses[bus_id].last_decision_epoch and \
                  ((self.state.time - self.state.buses[bus_id].last_decision_epoch) < dt.timedelta(minutes=DECISION_INTERVAL)) and \
-                 (update_event.event_type != EventType.PASSENGER_LEFT_BEHIND):
+                 (update_event.event_type != EventType.PASSENGER_LEFT_BEHIND) and \
+                 (update_event.event_type != EventType.VEHICLE_BREAKDOWN):
                 pass
-            elif (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND) or \
+            elif (update_event.event_type == EventType.VEHICLE_BREAKDOWN) or \
+                 (update_event.event_type == EventType.PASSENGER_LEFT_BEHIND) or \
                  (self.state.buses[bus_id].last_decision_epoch and \
                   (self.state.time - self.state.buses[bus_id].last_decision_epoch) >= dt.timedelta(minutes=DECISION_INTERVAL)) or \
                  (self.state.buses[bus_id].last_decision_epoch is None):
