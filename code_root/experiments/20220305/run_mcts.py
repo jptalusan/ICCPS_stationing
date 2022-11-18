@@ -4,11 +4,11 @@ DATA_DIR = f'{BASE_DIR}/scenarios/baseline/data'
 sys.path.append(BASE_DIR)
 
 # All dates and times should just be datetime!
-from decision_making.coordinator.DecisionMaker import DecisionMaker
-from decision_making.coordinator.GreedyCoordinator import GreedyCoordinator
-from decision_making.dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
-from decision_making.DecisionEnvironmentDynamics import DecisionEnvironmentDynamics
-from decision_making.CentralizedMCTS.Rollout import BareMinimumRollout
+from DecisionMaking.Coordinator.DecisionMaker import DecisionMaker
+from DecisionMaking.Coordinator.GreedyCoordinator import GreedyCoordinator
+from DecisionMaking.Dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
+from DecisionMaking.DecisionEnvironmentDynamics import DecisionEnvironmentDynamics
+from DecisionMaking.CentralizedMCTS.Rollout import BareMinimumRollout
 from Environment.DataStructures.Bus import Bus
 from Environment.DataStructures.Event import Event
 from Environment.DataStructures.State import State

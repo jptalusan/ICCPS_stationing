@@ -6,7 +6,7 @@ import datetime as dt
 from multiprocessing import Pool
 from Environment.DataStructures.Event import Event
 from Environment.enums import LogType, EventType, BusStatus, BusType
-from decision_making.CentralizedMCTS.ModularMCTS import ModularMCTS
+from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 import math
 

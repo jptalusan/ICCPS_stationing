@@ -3,7 +3,7 @@ import math
 import random
 import time
 import dill
-from decision_making.CentralizedMCTS.DataStructures.TreeNode import TreeNode
+from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType
 
