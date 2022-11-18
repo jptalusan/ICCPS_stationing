@@ -71,7 +71,8 @@ class DecisionMaker:
                  lookahead_horizon_delta_t,
                  allowed_computation_time,
                  starting_date,
-                 oracle):
+                 oracle,
+                 base_dir):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -88,6 +89,7 @@ class DecisionMaker:
         self.allowed_computation_time  = allowed_computation_time
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
         self.oracle = oracle
+        self.base_dir = base_dir
 
         self.starting_date = starting_date
         self.time_taken = {}
@@ -326,12 +328,12 @@ class DecisionMaker:
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
-        chain_dir = f'scenarios/baseline/chains'
+        chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
 
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'scenarios/baseline/data/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(f'{self.base_dir}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains

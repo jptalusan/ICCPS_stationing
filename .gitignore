@@ -355,3 +355,7 @@ code_root/run_mcts_ALL.py
 code_root/run_mctsall.py
 data_generation/test.ipynb
 code_root/run_mcts_20211123.py
+
+experiment_data
+code_root/experiments/run_mcts_20211018.py
+code_root/scenarios/baseline/data/config.json

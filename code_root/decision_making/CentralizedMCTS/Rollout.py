@@ -13,9 +13,9 @@ class BareMinimumRollout:
     Bare minimum rollout, send the nearest bus (if available) to cover for a broken down bus.
     """
 
-    def __init__(self):
+    def __init__(self, rollout_horizon_delta_t):
         self.deep_copy_time = 0
-        self.rollout_horizon_delta_t = 60 * 60 * 0.6  # 60*60*N for N hour horizon (0.6)
+        self.rollout_horizon_delta_t = rollout_horizon_delta_t  # 60*60*N for N hour horizon (0.6)
         # self.rollout_horizon_delta_t = None
         
         self.horizon_time_limit = None
@@ -86,7 +86,7 @@ class BareMinimumRollout:
         # rollout1
         # valid_actions, _ = environment_model.generate_possible_actions(node.state,
         #                                                                node.event_at_node,
-        #                                                                action_type=ActionType.OVERLOAD_ALL)
+        #                                                                action_type=ActionType.OVERLOAD_DISPATCH)
         # random.seed(100)
         # action_to_take = random.choice(valid_actions)
         
@@ -121,7 +121,6 @@ class BareMinimumRollout:
         
         # Limit the number of new events generated based on the time horizon!!!
         if len(new_events) > 0:
-            # TODO: Check if some are still added here...
             if new_events[0].time <= self.horizon_time_limit:
                 node.future_events_queue.append(new_events[0])
                 node.future_events_queue.sort(key=lambda _: _.time)
@@ -130,7 +129,6 @@ class BareMinimumRollout:
         node.event_at_node = node.future_events_queue.pop(0)
         new_events = self.process_event(node.state, node.event_at_node, environment_model)
         if len(new_events) > 0:
-            # TODO: Check if some are still added here...
             if new_events[0].time <= self.horizon_time_limit:
                 node.future_events_queue.append(new_events[0])
                 node.future_events_queue.sort(key=lambda _: _.time)

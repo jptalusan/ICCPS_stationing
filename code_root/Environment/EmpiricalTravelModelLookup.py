@@ -13,26 +13,27 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
-    def __init__(self, date_str, logger):
-        config_path = f'scenarios/baseline/data/trip_plan_{date_str}.json'
+    def __init__(self, base_dir, date_str, logger):
+        # config_path = f'scenarios/baseline/data/trip_plan_{date_str}.json'
+        config_path = f'{base_dir}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
-        disruption_path = 'scenarios/baseline/data/disruption_probabilities.pkl'
+        disruption_path = f'{base_dir}/disruption_probabilities.pkl'
         self.sampled_disruption = pd.read_pickle(disruption_path)
 
         self.logger = logger
 
-        with open('scenarios/baseline/data/sampled_travel_times_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/sampled_travel_times_dict.pkl', 'rb') as handle:
             self.sampled_travel_time = pickle.load(handle)
 
-        with open('scenarios/baseline/data/stops_tt_dd_node_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/stops_tt_dd_node_dict.pkl', 'rb') as handle:
             self.stops_tt_dd_dict = pickle.load(handle)
 
-        with open('scenarios/baseline/data/stops_node_matching_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/stops_node_matching_dict.pkl', 'rb') as handle:
             self.stop_nodes_dict = pickle.load(handle)
 
-        with open(f'scenarios/baseline/data/time_point_dict_{date_str}.pkl', 'rb') as handle:
+        with open(f'{base_dir}/time_point_dict_{date_str}.pkl', 'rb') as handle:
             self.time_point_dict = pickle.load(handle)
 
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
@@ -204,7 +205,11 @@ class EmpiricalTravelModelLookup:
             scheduled_time = str_timestamp_to_datetime(self.trip_plan[current_trip]['scheduled_time'][current_stop_number])
 
             key = (int(current_trip), current_stop_id, scheduled_time)
-            timepoint = self.time_point_dict[key]['timepoint']
+            if key in self.time_point_dict:
+                timepoint = self.time_point_dict[key]['timepoint']
+            else:
+                print(f"{key}: not in timepoint dictionary.")
+                return True
             return timepoint == 1
 
         return False

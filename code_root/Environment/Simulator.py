@@ -24,6 +24,7 @@ class Simulator:
         self.event_queue = starting_event_queue
         self.passenger_arrival_distribution = passenger_arrival_distribution
         self.logger = logger
+        self.save_metrics = config["save_metrics"]
         
         self.start_sim_time = None
         self.starting_num_events = len(starting_event_queue)
@@ -34,29 +35,31 @@ class Simulator:
         self.use_timepoints = config["use_timepoints"]
         self.log_name = config["mcts_log_name"]
 
-        spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
-        self.visual_log = spd.get('visualizer')
-        self.visual_log.set_pattern("%v")
-        self.visual_log.set_level(spd.LogLevel.DEBUG)
-        self.visual_log.debug(f"time,id,trip_id,last_visited_stop,value,fraction,icon,radius")
-
-        spd.FileLogger(name='stop_metrics', filename=f'logs/stop_metrics_{self.log_name}.csv', truncate=True)
-        self.stop_metrics_log = spd.get('stop_metrics')
-        self.stop_metrics_log.set_pattern("%v")
-        self.stop_metrics_log.set_level(spd.LogLevel.DEBUG)
-        self.stop_metrics_log.debug(f"state_time,stop_id,arrival_time,got_on_bus,remaining,block,trip,ons,offs,total_ons,total_offs,total_walkaway")
+        # spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
+        # self.visual_log = spd.get('visualizer')
+        # self.visual_log.set_pattern("%v")
+        # self.visual_log.set_level(spd.LogLevel.DEBUG)
+        # self.visual_log.debug(f"time,id,trip_id,last_visited_stop,value,fraction,icon,radius")
         
-        spd.FileLogger(name='bus_metrics', filename=f'logs/bus_metrics_{self.log_name}.csv', truncate=True)
-        self.bus_metrics_log = spd.get('bus_metrics')
-        self.bus_metrics_log.set_pattern("%v")
-        self.bus_metrics_log.set_level(spd.LogLevel.DEBUG)
-        self.bus_metrics_log.debug(f"state_time,bus_id,status,type,capacity,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served,deadkms,servicekms")
-
-        spd.FileLogger(name='action_taken', filename=f'logs/action_taken_{self.log_name}.csv', truncate=True)
-        self.action_taken_log = spd.get('action_taken')
-        self.action_taken_log.set_pattern("%v")
-        self.action_taken_log.set_level(spd.LogLevel.DEBUG)
-        self.action_taken_log.debug(f"state_time,action")
+        if self.save_metrics:
+            spd.FileLogger(name='stop_metrics', filename=f'logs/stop_metrics_{self.log_name}.csv', truncate=True)
+            self.stop_metrics_log = spd.get('stop_metrics')
+            self.stop_metrics_log.set_pattern("%v")
+            self.stop_metrics_log.set_level(spd.LogLevel.DEBUG)
+            
+            spd.FileLogger(name='bus_metrics', filename=f'logs/bus_metrics_{self.log_name}.csv', truncate=True)
+            self.bus_metrics_log = spd.get('bus_metrics')
+            self.bus_metrics_log.set_pattern("%v")
+            self.bus_metrics_log.set_level(spd.LogLevel.DEBUG)
+            
+            spd.FileLogger(name='action_taken', filename=f'logs/action_taken_{self.log_name}.csv', truncate=True)
+            self.action_taken_log = spd.get('action_taken')
+            self.action_taken_log.set_pattern("%v")
+            self.action_taken_log.set_level(spd.LogLevel.DEBUG)
+            
+            self.stop_metrics_log.debug(f"state_time,stop_id,arrival_time,got_on_bus,remaining,block,trip,ons,offs,total_ons,total_offs,total_walkaway")
+            self.bus_metrics_log.debug(f"state_time,bus_id,status,type,capacity,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served,deadkms,servicekms")
+            self.action_taken_log.debug(f"state_time,action")
         
         self.last_visual_log = None
         self.valid_actions = valid_actions
@@ -79,14 +82,14 @@ class Simulator:
             else:
                 _valid_actions = None
 
-            if self.config["method"] == "MCTS":
-                if self.config["scenario"] == "1A":
+            if self.config["method"].upper() == "MCTS":
+                if self.config["scenario"].upper() == "1A":
                     self.decide_and_take_actions_1A(update_event, _valid_actions)
-                elif self.config["scenario"] == "1B":
+                elif self.config["scenario"].upper() == "1B":
                     self.decide_and_take_actions_1B(update_event, _valid_actions)
-                elif self.config["scenario"] == "2A":
+                elif self.config["scenario"].upper() == "2A":
                     self.decide_and_take_actions_2A(update_event, _valid_actions)
-            elif self.config["method"] == "baseline":
+            elif self.config["method"].upper() == "BASELINE":
                 self.decide_and_take_actions_baseline(update_event, _valid_actions)
 
             update_event = self.event_queue.pop(0)
@@ -98,26 +101,35 @@ class Simulator:
                 
             # self.save_visualization(update_event.time, granularity_s=None)
             
-            self.log_metrics()
+            if self.save_metrics:
+                self.log_metrics()
         print("Done")
             
         self.print_states()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
         
     def decide_and_take_actions_baseline(self, update_event, _valid_actions):
-        chosen_action = self.event_processing_callback(_valid_actions,
-                                                       self.state,
-                                                       action_type=ActionType.OVERLOAD_ALL)
-
+        chosen_action = None
+        if update_event is None:
+            return
+        
+        if update_event.event_type == EventType.DECISION_ALLOCATION_EVENT:
+            chosen_action = self.event_processing_callback(_valid_actions,
+                                                        self.state,
+                                                        action_type=ActionType.OVERLOAD_ALLOCATE)
+        elif update_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
+            chosen_action = self.event_processing_callback(_valid_actions,
+                                                        self.state,
+                                                        action_type=ActionType.OVERLOAD_DISPATCH)
         if chosen_action is None:
             chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                
-        self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+        
+        if self.save_metrics:
+            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
         log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
         new_events, _ = self.environment_model.take_action(self.state, chosen_action)
         for event in new_events:
             self.add_event(event)
-        self.decision_events += 1
         
     def decide_and_take_actions_1A(self, update_event, _valid_actions):
         if (update_event) and \
@@ -128,8 +140,9 @@ class Simulator:
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
             if chosen_action is None:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                    
-            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            
+            if self.save_metrics:
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -154,8 +167,9 @@ class Simulator:
 
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                        
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                
+                if self.save_metrics:
+                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
                 
                 if self.environment_model.travel_model.is_event_a_timepoint(update_event, self.state):
                     log(self.logger, self.state.time, f"At time point.", LogType.DEBUG)
@@ -167,6 +181,8 @@ class Simulator:
                     self.add_event(event)
                 self.decision_events += 1
 
+    # TODO: Check if this is trying to dispatch in the future? Since bus may not have reached the "current_stop" yet.
+    # Need to check t_state_change
     def decide_and_take_actions_1B(self, update_event, _valid_actions):
         if (update_event) and \
             (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
@@ -176,8 +192,9 @@ class Simulator:
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
             if chosen_action is None:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                    
-            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            
+            if self.save_metrics:
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -208,8 +225,9 @@ class Simulator:
 
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                        
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                
+                if self.save_metrics:
+                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
@@ -226,8 +244,9 @@ class Simulator:
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
             if chosen_action is None:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                    
-            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            
+            if self.save_metrics:
+                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -248,8 +267,9 @@ class Simulator:
 
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-                        
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                
+                if self.save_metrics:
+                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
