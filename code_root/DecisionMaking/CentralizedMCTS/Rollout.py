@@ -13,11 +13,17 @@ class BareMinimumRollout:
     Bare minimum rollout, send the nearest bus (if available) to cover for a broken down bus.
     """
 
-    def __init__(self, rollout_horizon_delta_t):
+    def __init__(self, rollout_horizon_delta_t, dispatch_policy):
+        self.debug_rewards = None
+        self.passenger_arrival_distribution = None
         self.deep_copy_time = 0
-        self.rollout_horizon_delta_t = rollout_horizon_delta_t  # 60*60*N for N hour horizon (0.6)
-        # self.rollout_horizon_delta_t = None
+        # self.rollout_horizon_delta_t = rollout_horizon_delta_t  # 60*60*N for N hour horizon (0.6)
+        if rollout_horizon_delta_t:
+            self.rollout_horizon_delta_t = rollout_horizon_delta_t
+        else:
+            self.rollout_horizon_delta_t = None
         
+        self.dispatch_policy = dispatch_policy
         self.horizon_time_limit = None
             
         self.total_walkaways = 0
@@ -84,38 +90,48 @@ class BareMinimumRollout:
     """
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
         # rollout1
-        # valid_actions, _ = environment_model.generate_possible_actions(node.state,
-        #                                                                node.event_at_node,
-        #                                                                action_type=ActionType.OVERLOAD_DISPATCH)
+        valid_actions = []
+        if node.event_at_node.event_type == EventType.DECISION_ALLOCATION_EVENT:
+            valid_actions, _ = environment_model.generate_possible_actions(node.state,
+                                                                        node.event_at_node,
+                                                                        action_type=ActionType.OVERLOAD_ALLOCATE)
+        elif node.event_at_node.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or \
+             node.event_at_node.event_type == EventType.PASSENGER_LEFT_BEHIND:
+            valid_actions, _ = environment_model.generate_possible_actions(node.state,
+                                                                        node.event_at_node,
+                                                                        action_type=ActionType.OVERLOAD_DISPATCH)
         # random.seed(100)
         # action_to_take = random.choice(valid_actions)
-        
-        # action_to_take = environment_model.get_rollout_actions(node.state, valid_actions)
-        
-        # rollout2
-        if node.event_at_node.event_type == EventType.VEHICLE_BREAKDOWN:
-            idle_overload_buses = []
-            for bus_id, bus_obj in node.state.buses.items():
-                if (bus_obj.type == BusType.OVERLOAD) and \
-                        ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
-                    if len(bus_obj.bus_block_trips) <= 0:
-                        idle_overload_buses.append(bus_id)
-
-            broken_buses = []
-            for bus_id, bus_obj in node.state.buses.items():
-                if bus_obj.status == BusStatus.BROKEN:
-                    if bus_obj.current_block_trip is not None:
-                        broken_buses.append(bus_id)
-            if len(idle_overload_buses) > 0:
-                valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
-                valid_actions = list(itertools.product(*valid_actions))
-                random.seed(100)
-                action_to_take = random.choice(valid_actions)
-                action_to_take = {'type': action_to_take[0], 'overload_bus': action_to_take[1], 'info': action_to_take[2]}
-            else:
-                action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        if len(valid_actions) > 0:
+            action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
         else:
             action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            
+        
+        # rollout2
+        # if node.event_at_node.event_type == EventType.VEHICLE_BREAKDOWN:
+        #     idle_overload_buses = []
+        #     for bus_id, bus_obj in node.state.buses.items():
+        #         if (bus_obj.type == BusType.OVERLOAD) and \
+        #                 ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
+        #             if len(bus_obj.bus_block_trips) <= 0:
+        #                 idle_overload_buses.append(bus_id)
+        #
+        #     broken_buses = []
+        #     for bus_id, bus_obj in node.state.buses.items():
+        #         if bus_obj.status == BusStatus.BROKEN:
+        #             if bus_obj.current_block_trip is not None:
+        #                 broken_buses.append(bus_id)
+        #     if len(idle_overload_buses) > 0:
+        #         valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
+        #         valid_actions = list(itertools.product(*valid_actions))
+        #         random.seed(100)
+        #         action_to_take = random.choice(valid_actions)
+        #         action_to_take = {'type': action_to_take[0], 'overload_bus': action_to_take[1], 'info': action_to_take[2]}
+        #     else:
+        #         action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        # else:
+        #     action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         
@@ -139,12 +155,6 @@ class BareMinimumRollout:
 
         node.reward_to_here = node.reward_to_here + discounted_immediate_score
         # print(len(node.future_events_queue))
-
-    """
-    - Plan, create a vector in state that is just [[stops][remainings] for passenger arrivals
-    - basically reduce loops per rollout iteration
-    - Use just vehicle_arrival and update vehicle location and where they will go (do last, not sure how possible)
-    """
 
     def standard_discounted_score(self, reward, time_since_start, discount_factor):
         discount = discount_factor ** time_since_start.total_seconds()

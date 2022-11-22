@@ -15,5 +15,5 @@ class RandomDispatch:
         
         if len(actions) <= 0:
             return None
-
+        random.seed(100)
         return random.choice(actions)

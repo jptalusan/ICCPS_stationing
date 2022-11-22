@@ -20,6 +20,7 @@ class EnvironmentModelFast:
         Updates the state to the given time. This is mostly updating the responders
         :param state:
         :param curr_event:
+        :param passenger_arrival_distribution:
         :return:
         """
         new_events = []
@@ -69,7 +70,7 @@ class EnvironmentModelFast:
                 # Bus running time
                 if state.buses[bus_id].time_at_last_stop:
                     state.buses[bus_id].total_service_time += (
-                                new_time - state.buses[bus_id].time_at_last_stop).total_seconds()
+                            new_time - state.buses[bus_id].time_at_last_stop).total_seconds()
                 state.buses[bus_id].time_at_last_stop = new_time
                 state.buses[bus_id].current_stop = current_stop_id
 
@@ -112,10 +113,11 @@ class EnvironmentModelFast:
                         state.buses[bus_id].time_at_last_stop = time_of_activation
 
                         arrival_event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
-                                           time=time_to_state_change,
-                                           type_specific_information={'bus_id': bus_id,
-                                                                      'current_block_trip': current_block_trip,
-                                                                      'stop': state.buses[bus_id].current_stop_number})
+                                              time=time_to_state_change,
+                                              type_specific_information={'bus_id': bus_id,
+                                                                         'current_block_trip': current_block_trip,
+                                                                         'stop': state.buses[
+                                                                             bus_id].current_stop_number})
                         new_events.append(arrival_event)
 
                 # Going to next stop
@@ -151,10 +153,10 @@ class EnvironmentModelFast:
                     state.buses[bus_id].distance_to_next_stop = distance
 
                     arrival_event = Event(event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
-                                       time=time_to_state_change,
-                                       type_specific_information={'bus_id': bus_id,
-                                                                  'current_block_trip': current_block_trip,
-                                                                  'stop': state.buses[bus_id].current_stop_number})
+                                          time=time_to_state_change,
+                                          type_specific_information={'bus_id': bus_id,
+                                                                     'current_block_trip': current_block_trip,
+                                                                     'stop': state.buses[bus_id].current_stop_number})
                     new_events.append(arrival_event)
 
             elif BusStatus.ALLOCATION == bus_state:
@@ -312,15 +314,15 @@ class EnvironmentModelFast:
                         log(self.logger,
                             _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}",
                             LogType.ERROR)
-                        
+
                         # HACK full_state.time
                         # If someone is left behind, immediately flag a decision event
                         if full_state.buses[bus_id].type == BusType.REGULAR:
                             # _time = max(full_state.time, bus_arrival_time)
                             full_state.buses[bus_id].t_state_change = bus_arrival_time
                             event = Event(event_type=EventType.PASSENGER_LEFT_BEHIND,
-                                        time=bus_arrival_time,
-                                        type_specific_information={'bus_id': bus_id})
+                                          time=bus_arrival_time,
+                                          type_specific_information={'bus_id': bus_id})
                             new_events.append(event)
 
                     stop_object.passenger_waiting[route_id_dir] = passenger_waiting[route_id_dir]
@@ -475,7 +477,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             #     moves += 1
             # if moves > 0:
             #     ofb_obj.current_stop_number = 0
-                
+
             ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
                                                                                   ofb_obj.current_stop_number)

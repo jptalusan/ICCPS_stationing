@@ -1,0 +1,7 @@
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore
+!run_mcts.py
+!run_mcts_no_inject.py
+!test.sh

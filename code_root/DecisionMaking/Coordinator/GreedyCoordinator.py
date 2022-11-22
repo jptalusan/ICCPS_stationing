@@ -14,6 +14,7 @@ class GreedyCoordinator:
 
     def event_processing_callback_funct(self, actions, state, action_type):
         valid_actions = self.generate_possible_actions(state, action_type)
+        # action_to_take = self.dispatch_policy.select_overload_to_dispatch(state, valid_actions)
         action_to_take = self.select_overload_to_dispatch(state, valid_actions)
         return action_to_take
     
@@ -115,6 +116,7 @@ class GreedyCoordinator:
         return valid_actions
     
     def select_overload_to_dispatch(self, state, actions):
+        random.seed(100)
         if len(actions) <= 0:
             return None
 

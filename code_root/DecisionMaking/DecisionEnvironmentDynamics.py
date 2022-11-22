@@ -50,7 +50,9 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             valid_actions.extend(_valid_actions)
 
         if action_type == ActionType.OVERLOAD_DISPATCH or action_type == ActionType.OVERLOAD_ALL:
-            if event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or event.event_type == EventType.DECISION_DISPATCH_EVENT:
+            if event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or \
+                    event.event_type == EventType.DECISION_DISPATCH_EVENT or \
+                    event.event_type == EventType.PASSENGER_LEFT_BEHIND:
                 bus_id = event.type_specific_information['bus_id']
                 if state.buses[bus_id].type != BusType.OVERLOAD and state.buses[bus_id].status == BusStatus.IN_TRANSIT:
                     if 'current_block_trip' in event.type_specific_information:
@@ -86,15 +88,15 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
                     # If no left behind people, just add current stop visited to actions space
                     if len(stops_with_left_behind_passengers) <= 0:
-                        if state.time >= state.buses[bus_id].t_state_change:
-                            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
-                            route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
-                            stops_with_left_behind_passengers.append((past_stops[-1],
-                                                                        route_id_dir,
-                                                                        scheduled_arrival_time,
-                                                                        0,
-                                                                        current_block_trip))
-                        
+                        # if state.time >= state.buses[bus_id].t_state_change:
+                        scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
+                        route_id_dir = self.travel_model.get_route_id_dir_for_trip(current_block_trip)
+                        stops_with_left_behind_passengers.append((past_stops[-1],
+                                                                    route_id_dir,
+                                                                    scheduled_arrival_time,
+                                                                    0,
+                                                                    current_block_trip))
+
                     _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
                                         stops_with_left_behind_passengers]
                     _valid_actions = list(itertools.product(*_valid_actions))
@@ -145,7 +147,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
     # Problem is it just gets stuck in a loop of reallocation, preventing the simulation from moving forward
     def get_valid_allocations(self, state):
         num_available_buses = len(
-            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+            [_ for _ in state.buses.values() if (_.status == BusStatus.IDLE or _.status == BusStatus.ALLOCATION) and _.type == BusType.OVERLOAD])
 
         if num_available_buses <= 0:
             return []
@@ -277,7 +279,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             # if not no_trips_left:
             #     if moves > 0:
             #         ofb_obj.current_stop_number = 0
-                    
+
             ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(ofb_obj.current_block_trip,
                                                                                 ofb_obj.current_stop_number)
@@ -338,11 +340,11 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             passenger_waiting = stop_obj.passenger_waiting
             if not passenger_waiting:
                 continue
-        
+
             for route_id_dir, route_pw in passenger_waiting.items():
                 if not route_pw:
                     continue
-        
+
                 for arrival_time, pw in route_pw.items():
                     remaining_passengers = pw['remaining']
                     total_remaining += remaining_passengers
@@ -352,17 +354,4 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             total_passengers_served += bus_obj.total_passengers_served
             total_aggregate_delay += bus_obj.delay_time
 
-        # return (-2 * total_walk_aways) + (-2 * total_remaining) + total_passenger_ons
-        # return (-1 * total_walk_aways) + \
-        #        (-1 * total_remaining) + \
-        #        total_passenger_ons + \
-        #        (-40 * total_deadkms) + \
-        #        (-5 * total_aggregate_delay)
-        # return total_passengers_served
-        # return total_passengers_served + (-0.2 * total_deadkms) + (-100 * total_broken_buses) + (-0.2 * total_aggregate_delay)
-        return total_passengers_served + (-10 * total_walk_aways) 
-        # return 2 * total_passengers_served + (-10 * total_deadkms)
-
-    # TODO: Not sure if this is too hacky or just right (i feel too hacky)
-    def get_rollout_actions(self, state, actions):
-        return self.send_nearest_dispatch.select_overload_to_dispatch(state, actions)
+        return (-1 * total_remaining) + (-1 * total_deadkms)

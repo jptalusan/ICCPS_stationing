@@ -1,4 +1,5 @@
 import sys
+
 BASE_DIR = '../../../code_root'
 DATA_DIR = f'{BASE_DIR}/scenarios/baseline/data'
 sys.path.append(BASE_DIR)
@@ -225,8 +226,8 @@ def manually_insert_dispatch_events(bus_arrival_events, starting_date, buses, tr
         # datetime_range = np.arange(earliest_datetime, latest_datetime, np.timedelta64(intervals, 'm'))
         for _dt in datetime_range:
             event = Event(event_type=EventType.DECISION_DISPATCH_EVENT,
-                        time=_dt,
-                        type_specific_information={'bus_id': bus_id})
+                          time=_dt,
+                          type_specific_information={'bus_id': bus_id})
             bus_arrival_events.append(event)
 
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
@@ -236,21 +237,22 @@ def send_email(config):
     smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
     # start TLS for security which makes the connection more secure
     smtpobj.starttls()
-    senderemail_id="jptalusan@gmail.com"
-    senderemail_id_password="bhgbzkzzwgrhnpji"
-    receiveremail_id="jptalusan@gmail.com"
+    senderemail_id = "jptalusan@gmail.com"
+    senderemail_id_password = "bhgbzkzzwgrhnpji"
+    receiveremail_id = "jptalusan@gmail.com"
     # Authentication for signing to gmail account
     smtpobj.login(senderemail_id, senderemail_id_password)
     # message to be sent
     # message = f"Finished running: {config['mcts_log_name']} on digital-storm-1."
     SUBJECT = f"DONE with {config['mcts_log_name']}"
     message = 'Subject: {}\n\n{}'.format(SUBJECT, "Testing done on digital-storm-1")
-    
+
     # sending the mail - passing 3 arguments i.e sender address, receiver address and the message
-    smtpobj.sendmail(senderemail_id,receiveremail_id, message)
+    smtpobj.sendmail(senderemail_id, receiveremail_id, message)
     # Hereby terminate the session
     smtpobj.quit()
     print("mail send - Using simple text message")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -299,7 +301,7 @@ if __name__ == '__main__':
     sim_environment = EnvironmentModelFast(travel_model, logger)
 
     # TODO: Switch dispatch policies with NearestDispatch
-    dispatch_policy = SendNearestDispatchPolicy(travel_model) # RandomDispatch(travel_model)
+    dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
     valid_actions = None
@@ -327,7 +329,13 @@ if __name__ == '__main__':
     # Adding interval events
     if config["use_intervals"]:
         before_count = len(bus_arrival_events)
-        bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+        print("reallocation", config["reallocation"])
+        if config["reallocation"]:
+            bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
+            print("Reallocation is ON")
+        else:
+            print("Reallocation is OFF")
+            
         if config["scenario"] == "2A":
             bus_arrival_events = manually_insert_dispatch_events(bus_arrival_events, starting_date, Buses, trip_plan, intervals=15)
         after_count = len(bus_arrival_events)
@@ -352,7 +360,8 @@ if __name__ == '__main__':
                                          time=bus_arrival_events[0].time))
 
     mcts_discount_factor = config["mcts_discount_factor"]
-    rollout_policy = BareMinimumRollout(rollout_horizon_delta_t=config["rollout_horizon_delta_t"])
+    rollout_policy = BareMinimumRollout(rollout_horizon_delta_t=config["rollout_horizon_delta_t"],
+                                        dispatch_policy=dispatch_policy)
     lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
     # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = config["uct_tradeoff"]

@@ -16,6 +16,7 @@ from tensorflow import keras
 from tensorflow.keras.layers import Dense, LSTM, Dropout
 from copy import deepcopy
 from tqdm import tqdm
+from pathlib import Path
 
 mpl.rcParams['figure.facecolor'] = 'white'
 
@@ -434,7 +435,8 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
             #     pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
             pass
         else:
-            with open(f'results/chains/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
+            Path("results/chains/{DATE.replace("-","")}").mkdir(parents=True, exist_ok=True)
+            with open(f'results/chains/{DATE.replace("-","")}/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
                 pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
     stop_times_fp = f'data/GTFS/{GTFS_MONTH}/stop_times.txt'

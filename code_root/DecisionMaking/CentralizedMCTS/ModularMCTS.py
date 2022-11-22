@@ -2,10 +2,9 @@ import copy
 import math
 import random
 import time
-import dill
 from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
-from Environment.enums import ActionType
+from Environment.enums import ActionType, EventType
 
 
 class ModularMCTS:
@@ -19,6 +18,7 @@ class ModularMCTS:
                  exploit_explore_tradoff_param,
                  action_type
                  ):
+        self.passenger_arrival_distribution = None
         self.allowed_computation_time = allowed_computation_time
         self.rollout_policy = rollout_policy
         self.iter_limit = iter_limit
@@ -36,7 +36,7 @@ class ModularMCTS:
 
         self.action_type = action_type
 
-    # QUESTION: What would happen if there are no events in that horizon/batch/tree?
+    # QUESTION: The event that brought us here is not the event_at_node. Is that correct or weird?
     def solve(self,
               state,
               starting_event_queue,
@@ -126,7 +126,7 @@ class ModularMCTS:
 
                 root.children.append(_new_node)
 
-        best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
+        # best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
         actions_with_scores = self.get_scored_child_actions(root)
 
         return {'scored_actions': actions_with_scores,
@@ -320,5 +320,5 @@ class ModularMCTS:
         scaled_explore_2 = scaled_explore_param * explore
         score = exploit + scaled_explore_2
 
-        # score = exploit + explore
+        score = exploit + explore
         return score

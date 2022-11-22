@@ -10,20 +10,30 @@ tmux kill-session -t $session
 tmux new-session -d -s $session
 
 window=0
-tmux rename-window -t $session:$window '1A'
-tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root' 'C-m'
-tmux send-keys 'python run_mcts.py -c tests/config_1B_800_1800RO' C-m
-tmux select-pane -T 'config_1B_800_1800RO'
-
-tmux split-window -h
-tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root' 'C-m'
-tmux send-keys 'python run_mcts.py -c tests/config_1B_800_5400RO' C-m
-tmux select-pane -T 'config_1B_800_5400RO'
-
-tmux split-window -h
-tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root' 'C-m'
+tmux rename-window -t $session:$window '1'
+tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root/20220305' 'C-m'
 tmux send-keys 'python run_mcts.py -c tests/config_1B_800_7200RO' C-m
 tmux select-pane -T 'config_1B_800_7200RO'
+
+tmux split-window -h
+tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root/20220305' 'C-m'
+tmux send-keys 'python run_mcts.py -c configs/1B_200_LIMITED' C-m
+
+tmux split-window -h
+tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root/20220305' 'C-m'
+tmux send-keys 'python run_mcts_no_inject.py -c configs/config_1B_800_5400RO' C-m
+# tmux select-pane -T 'config_1B_800_5400RO'
+
+tmux split-window -h
+tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root/20220305' 'C-m'
+tmux send-keys 'python run_mcts_no_inject.py -c configs/BASELINE_FULL' C-m
+tmux send-keys 'python run_mcts_no_inject.py -c configs/BASELINE_LIMITED_NO_OVER' C-m
+tmux send-keys 'python run_mcts_no_inject.py -c configs/BASELINE_LIMITED' C-m
+
+tmux send-keys 'python run_mcts.py -c configs/BASELINE_FULL' C-m
+tmux send-keys 'python run_mcts.py -c configs/BASELINE_LIMITED_NO_OVER' C-m
+tmux send-keys 'python run_mcts.py -c configs/BASELINE_LIMITED' C-m
+tmux select-pane -T 'BASELINE'
 
 # tmux split-window -h
 # tmux send-keys 'conda activate py39' 'C-m' 'cd /media/seconddrive/JP/gits/mta_simulator_redo/code_root' 'C-m'

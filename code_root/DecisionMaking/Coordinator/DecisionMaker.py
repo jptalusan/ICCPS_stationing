@@ -20,6 +20,7 @@ Combine the two files here:
 # The output here is the action (which is obtained by running MCTS solver)
 """
 
+
 def run_low_level_mcts(arg_dict):
     """
     arg dict needs:
@@ -46,8 +47,8 @@ def run_low_level_mcts(arg_dict):
                          exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'],
                          action_type=arg_dict['action_type'])
 
-    res = solver.solve(arg_dict['current_state'], 
-                       arg_dict['bus_arrival_events'], 
+    res = solver.solve(arg_dict['current_state'],
+                       arg_dict['bus_arrival_events'],
                        arg_dict['passenger_arrival_distribution'])
 
     return {'region_id': arg_dict['tree_number'],
@@ -86,7 +87,7 @@ class DecisionMaker:
         self.rollout_policy = rollout_policy
         self.uct_tradeoff = uct_tradeoff
         self.iter_limit = iter_limit
-        self.allowed_computation_time  = allowed_computation_time
+        self.allowed_computation_time = allowed_computation_time
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
         self.oracle = oracle
         self.base_dir = base_dir
@@ -108,8 +109,13 @@ class DecisionMaker:
             if chosen_action is None:
                 return None
             return chosen_action
-        # print("no available buses")
-        return None
+        else:
+            print(f"Event counter: {self.event_counter}")
+            print(f"Event: {state.bus_events[0]}")
+            print(f"Time: {state.time}")
+            print("no available buses")
+            print()
+            return None
 
     def any_available_overload_buses(self, state):
         num_available_buses = len(
@@ -118,7 +124,7 @@ class DecisionMaker:
                      (_.status == BusStatus.IDLE)
                      or
                      (_.status == BusStatus.ALLOCATION)
-                 )
+             )
              and _.type == BusType.OVERLOAD])
         return num_available_buses > 0
 
@@ -146,9 +152,8 @@ class DecisionMaker:
         # print(event_queues)
         final_action = {}
 
-
         decision_start = time.time()
-        
+
         if self.pool_thread_count == 0:
             res_dict = []
             inputs = self.get_mcts_inputs(states=states,
@@ -255,9 +260,9 @@ class DecisionMaker:
                     best_score = actions['avg_score']
                     overall_best_action = actions['action']
             final_action = overall_best_action
-        
+
         self.time_taken['decision_maker'] = time.time() - decision_start
-        
+
         sorted_actions = res_dict[0]['mcts_res']['scored_actions']
         sorted_actions.sort(key=lambda _: _['score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
@@ -265,12 +270,14 @@ class DecisionMaker:
         # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
 
         print(f"Event counter: {self.event_counter}")
+        print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
         [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
+        print(f"Final action: {final_action}")
         print()
-        
+
         return final_action
 
     def get_mcts_inputs(self,
@@ -309,22 +316,22 @@ class DecisionMaker:
 
     def load_events(self, state):
         events = copy.copy(state.bus_events)
-        
+
         if state.time.time() == dt.time(0, 0, 0):
             start_time = events[0].time
         else:
             start_time = state.time
-            
+
         # Rollout lookahead_horizon
         if self.lookahead_horizon_delta_t:
             lookahead_horizon = start_time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
             _events = [event for event in events if start_time <= event.time <= lookahead_horizon]
         else:
             _events = [event for event in events if start_time <= event.time]
-            
+
         if len(_events) <= 0:
             _events = [events[0]]
-            
+
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
@@ -333,7 +340,7 @@ class DecisionMaker:
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'{self.base_dir}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(f'{self.base_dir}/data/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains
@@ -361,7 +368,7 @@ class DecisionMaker:
             _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
         else:
             _events = [event for event in state_events if state.time <= event.time]
-            
+
         event_chains.append(_events)
-            
+
         return event_chains

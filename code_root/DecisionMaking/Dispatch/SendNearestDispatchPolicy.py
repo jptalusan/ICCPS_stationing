@@ -13,11 +13,20 @@ class SendNearestDispatchPolicy:
 
     # Right now only handling BROKEN and DISPATCH not ALLOC buses
     def select_overload_to_dispatch(self, state, actions):
+        random.seed(100)
         if len(actions) <= 0:
             return None
 
         actions_with_distance = []
 
+        is_all_allocation = True
+        for action in actions:
+            if action['type'] != ActionType.OVERLOAD_ALLOCATE and action['type'] != ActionType.NO_ACTION:
+                is_all_allocation = False
+                
+        if is_all_allocation:
+            return random.choice(actions)
+    
         for action in actions:
             action_type = action['type']
             overload_bus = action['overload_bus']
@@ -29,22 +38,18 @@ class SendNearestDispatchPolicy:
             elif (action_type == ActionType.NO_ACTION) and (len(actions) > 1):
                 continue
             
-            elif (action_type == ActionType.OVERLOAD_ALLOCATE) and (len(actions) > 1):
-                continue
-            
             current_stop = state.buses[overload_bus].current_stop
             next_stop = None
 
             if action_type == ActionType.OVERLOAD_TO_BROKEN:
                 broken_bus = info
                 next_stop = state.buses[info].current_stop
-                
-            # elif action_type == ActionType.OVERLOAD_DISPATCH:
-                # next_stop = info[0]
-                # pass
-            # elif action_type == ActionType.OVERLOAD_ALLOCATE:
-            #     next_stop = info
-            #     pass
+            elif action_type == ActionType.OVERLOAD_DISPATCH:
+                next_stop = info[0]
+                pass
+            elif action_type == ActionType.OVERLOAD_ALLOCATE:
+                next_stop = info
+                pass
             else:
                 raise "Action not supported"
 

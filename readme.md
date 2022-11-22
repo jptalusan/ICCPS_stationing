@@ -125,3 +125,8 @@ Question: Should the rollout still be generating new events? (i think yes.)
 2. Setup combinatorial with intervals
     * Decide which trip/trips to send overload buses to
     * Next action, decide which bus to send to which trip/trips (start with nearest (iterative))
+
+
+11-22-2022
+* Changed ROLLOUT to behave similar to GreedyCoordinator
+* Added configs to control code easier
