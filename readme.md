@@ -130,3 +130,7 @@ Question: Should the rollout still be generating new events? (i think yes.)
 11-22-2022
 * Changed ROLLOUT to behave similar to GreedyCoordinator
 * Added configs to control code easier
+* Added random.seeds for testability
+* Fixed issue with `update_event = self.event_queues.pop(0)` that was causing events to be missed.
+* Fixed conditions which failed to handle `LEAVE_PASSENGER_BEHIND` events.
+* Created experiments folder for easier testing.

@@ -354,4 +354,5 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             total_passengers_served += bus_obj.total_passengers_served
             total_aggregate_delay += bus_obj.delay_time
 
-        return (-1 * total_remaining) + (-1 * total_deadkms)
+        return (-1 * total_remaining)
+        # return (-1 * total_remaining) + (-1 * total_deadkms)
