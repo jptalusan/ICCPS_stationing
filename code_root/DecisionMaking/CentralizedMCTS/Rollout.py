@@ -87,6 +87,7 @@ class BareMinimumRollout:
     """
     SendNearestDispatch if a vehicle is broken, else do nothing.
     However, breakdown events are not generated in the event chains.
+    I think, if i set this rollout to exactly the same as the Greedy, it might improve. (takes SO LONG) 
     """
     def rollout_iter(self, node, environment_model, discount_factor, solve_start_time):
         # rollout1
@@ -95,44 +96,22 @@ class BareMinimumRollout:
             valid_actions, _ = environment_model.generate_possible_actions(node.state,
                                                                         node.event_at_node,
                                                                         action_type=ActionType.OVERLOAD_ALLOCATE)
+            # valid_actions = environment_model.generate_possible_actions_OLD(node.state,
+            #                                                                    action_type=ActionType.OVERLOAD_ALLOCATE)
+            
         elif node.event_at_node.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or \
              node.event_at_node.event_type == EventType.PASSENGER_LEFT_BEHIND:
             valid_actions, _ = environment_model.generate_possible_actions(node.state,
                                                                         node.event_at_node,
                                                                         action_type=ActionType.OVERLOAD_DISPATCH)
+            # valid_actions = environment_model.generate_possible_actions_OLD(node.state,
+            #                                                                    action_type=ActionType.OVERLOAD_DISPATCH)
         # random.seed(100)
         # action_to_take = random.choice(valid_actions)
         if len(valid_actions) > 0:
             action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
         else:
             action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-            
-        
-        # rollout2
-        # if node.event_at_node.event_type == EventType.VEHICLE_BREAKDOWN:
-        #     idle_overload_buses = []
-        #     for bus_id, bus_obj in node.state.buses.items():
-        #         if (bus_obj.type == BusType.OVERLOAD) and \
-        #                 ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):
-        #             if len(bus_obj.bus_block_trips) <= 0:
-        #                 idle_overload_buses.append(bus_id)
-        #
-        #     broken_buses = []
-        #     for bus_id, bus_obj in node.state.buses.items():
-        #         if bus_obj.status == BusStatus.BROKEN:
-        #             if bus_obj.current_block_trip is not None:
-        #                 broken_buses.append(bus_id)
-        #     if len(idle_overload_buses) > 0:
-        #         valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
-        #         valid_actions = list(itertools.product(*valid_actions))
-        #         random.seed(100)
-        #         action_to_take = random.choice(valid_actions)
-        #         action_to_take = {'type': action_to_take[0], 'overload_bus': action_to_take[1], 'info': action_to_take[2]}
-        #     else:
-        #         action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-        # else:
-        #     action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
-
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         
         # Limit the number of new events generated based on the time horizon!!!

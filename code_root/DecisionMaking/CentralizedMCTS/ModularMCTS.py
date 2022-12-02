@@ -5,6 +5,7 @@ import time
 from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType, EventType
+# import spdlog as spd
 
 
 class ModularMCTS:
@@ -35,6 +36,10 @@ class ModularMCTS:
                              'rollout': 0}
 
         self.action_type = action_type
+        
+        # spd.FileLogger(name=f'mcts', filename=f'logs/exploit_explore.log', truncate=False, multithreaded=False)
+        # self.logger = spd.get('mcts')
+        # self.logger.set_pattern("%v")
 
     # QUESTION: The event that brought us here is not the event_at_node. Is that correct or weird?
     def solve(self,
@@ -316,9 +321,16 @@ class ModularMCTS:
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
 
         # I just copied from Ava's code
-        scaled_explore_param = self.exploit_explore_tradoff_param * abs(exploit)
-        scaled_explore_2 = scaled_explore_param * explore
+        # scaled_explore_param = self.exploit_explore_tradoff_param * abs(exploit)
+        
+        # scaled_explore_2 = scaled_explore_param * explore
+        scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
         score = exploit + scaled_explore_2
-
-        score = exploit + explore
+        
+        # if node.action_to_get_here['type'] == ActionType.OVERLOAD_DISPATCH:
+            # self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
+            # print(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
+        # self.logger.info(f"{exploit:.2f},{explore:.2f}")
+        
+        # score = exploit + explore
         return score

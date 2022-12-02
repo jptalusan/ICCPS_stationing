@@ -61,10 +61,10 @@ class Simulator:
             self.action_taken_log.set_level(spd.LogLevel.DEBUG)
 
             self.stop_metrics_log.debug(
-                f"state_time,stop_id,arrival_time,got_on_bus,remaining,block,trip,ons,offs,total_ons,total_offs,total_walkaway")
+                f"state_time,event_no,stop_id,arrival_time,got_on_bus,remaining,block,trip,ons,offs,total_ons,total_offs,total_walkaway")
             self.bus_metrics_log.debug(
-                f"state_time,bus_id,status,type,capacity,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served,deadkms,servicekms")
-            self.action_taken_log.debug(f"state_time,action")
+                f"event_no,state_time,bus_id,status,type,capacity,load,current_block,current_trip,current_stop,time_at_last_stop,total_passengers_served,deadkms,servicekms")
+            self.action_taken_log.debug(f"event_no,state_time,action")
 
         self.last_visual_log = None
         self.valid_actions = valid_actions
@@ -123,6 +123,10 @@ class Simulator:
         chosen_action = None
         if update_event is None:
             return
+        
+        bus_id = update_event.type_specific_information.get('bus_id')
+        if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
+            return
 
         if update_event.event_type == EventType.DECISION_ALLOCATION_EVENT:
             chosen_action = self.event_processing_callback(_valid_actions,
@@ -137,7 +141,7 @@ class Simulator:
             chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
         if self.save_metrics:
-            self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+            self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
         log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
         new_events, _ = self.environment_model.take_action(self.state, chosen_action)
         for event in new_events:
@@ -154,7 +158,7 @@ class Simulator:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
             if self.save_metrics:
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -181,7 +185,7 @@ class Simulator:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
                 if self.save_metrics:
-                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                    self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
 
                 if self.environment_model.travel_model.is_event_a_timepoint(update_event, self.state):
                     log(self.logger, self.state.time, f"At time point.", LogType.DEBUG)
@@ -206,7 +210,7 @@ class Simulator:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
             if self.save_metrics:
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -241,7 +245,7 @@ class Simulator:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
                 if self.save_metrics:
-                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                    self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
@@ -260,7 +264,7 @@ class Simulator:
                 chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
             if self.save_metrics:
-                self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
             log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
             new_events, _ = self.environment_model.take_action(self.state, chosen_action)
             for event in new_events:
@@ -283,7 +287,7 @@ class Simulator:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
                 if self.save_metrics:
-                    self.action_taken_log.debug(f"{self.state.time},{chosen_action}")
+                    self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
                 log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
                 new_events, _ = self.environment_model.take_action(self.state, chosen_action)
                 for event in new_events:
@@ -311,7 +315,7 @@ class Simulator:
                         trip = w['block_trip'][1]
                         ons = w['ons']
                         offs = w['offs']
-                        output = f"{stop_id},{arrival_time},{got_on_bus},{remaining},{block},{trip},{ons},{offs},{stop_obj.total_passenger_ons},{stop_obj.total_passenger_offs},{stop_obj.total_passenger_walk_away}"
+                        output = f"{self.num_events_processed},{stop_id},{arrival_time},{got_on_bus},{remaining},{block},{trip},{ons},{offs},{stop_obj.total_passenger_ons},{stop_obj.total_passenger_offs},{stop_obj.total_passenger_walk_away}"
                         self.stop_metrics_log.debug(f"{log_time},{output}")
 
         for bus_id, bus_obj in self.state.buses.items():
@@ -333,7 +337,7 @@ class Simulator:
             servicekms_moved = bus_obj.total_servicekms_moved
 
             self.bus_metrics_log.debug(
-                f"{log_time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved},")
+                f"{self.num_events_processed},{log_time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved}")
 
     def print_states(self):
         LOGTYPE = LogType.INFO

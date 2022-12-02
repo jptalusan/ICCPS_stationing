@@ -136,8 +136,8 @@ def add_features(df):
     df = df.drop(columns=['minute', 'minuteByWindow', 'temp'])
 
     # HACK
-    df = df[df['hour'] != 3]
-    df = df[df['stop_sequence'] != 0]
+    # df = df[df['hour'] != 3]
+    # df = df[df['stop_sequence'] != 0]
 
     df = df.sort_values(by=['block_abbr', 'arrival_time']).reset_index(drop=True)
 
@@ -261,20 +261,20 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
     df = apcdata.toPandas()
 
     # HACK
-    a = df.query("trip_id == '259845' and vehicle_id == '1818'").sort_values('stop_sequence')
-    b = df.query("trip_id == '259845' and vehicle_id == '2008'").sort_values('stop_sequence')
-    m1 = merge_overload_regular_bus_trips(a, b)
+    # a = df.query("trip_id == '259845' and vehicle_id == '1818'").sort_values('stop_sequence')
+    # b = df.query("trip_id == '259845' and vehicle_id == '2008'").sort_values('stop_sequence')
+    # m1 = merge_overload_regular_bus_trips(a, b)
 
-    a = df.query("trip_id == '259635' and vehicle_id == '2019'").sort_values('stop_sequence')
-    b = df.query("trip_id == '259635' and vehicle_id == '1914'").sort_values('stop_sequence')
-    m2 = merge_overload_regular_bus_trips(a, b)
+    # a = df.query("trip_id == '259635' and vehicle_id == '2019'").sort_values('stop_sequence')
+    # b = df.query("trip_id == '259635' and vehicle_id == '1914'").sort_values('stop_sequence')
+    # m2 = merge_overload_regular_bus_trips(a, b)
 
-    tdf = df.query("overload_id == 0")
-    overload_trips = df.query("overload_id > 0").trip_id.unique()
-    tdf = tdf[~tdf['trip_id'].isin(overload_trips)]
-    df = pd.concat([tdf, m1, m2])
+    df = df.query("overload_id == 0")
+    # overload_trips = df.query("overload_id > 0").trip_id.unique()
+    # tdf = tdf[~tdf['trip_id'].isin(overload_trips)]
+    # df = pd.concat([tdf, m1, m2])
     df = df.dropna(subset=['arrival_time'])
-    df = df.fillna(method='ffill').fillna(method='bfill')
+    # df = df.fillna(method='ffill').fillna(method='bfill')
 
     # HACK
     # df = df.query("route_id != 95")
@@ -284,7 +284,7 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
     raw_df = deepcopy(df)
 
     # HACK
-    df.loc[df['time_window'].isin([6, 7, 8]), 'time_window'] = 16
+    # df.loc[df['time_window'].isin([6, 7, 8]), 'time_window'] = 16
 
     input_df = prepare_input_data(df, ohe_encoder, label_encoders, num_scaler, columns, target='y_class')
     input_df = input_df.drop(columns=ohe_columns)
@@ -431,11 +431,11 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
         sampled_ons_offs_dict = df.to_dict('index')
         
         if chain == 0:
-            # with open(f'results/sampled_ons_offs_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
-            #     pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(f'results/sampled_ons_offs_dict_{DATE.replace("-", "")}.pkl', 'wb') as handle:
+                pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
             pass
         else:
-            Path("results/chains/{DATE.replace("-","")}").mkdir(parents=True, exist_ok=True)
+            Path(f'results/chains/{DATE.replace("-","")}').mkdir(parents=True, exist_ok=True)
             with open(f'results/chains/{DATE.replace("-","")}/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
                 pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
@@ -457,11 +457,11 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
 
 if __name__ == '__main__':
     # GTFS_MONTH = 'OCT2021'
-    # dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
+    # dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02', '2022-03-05']
     
-    CHAINS = 10
+    CHAINS = 51
     GTFS_MONTH = 'JAN2022'
-    dates = ['2022-03-05']
+    dates = ['2021-03-05']
     for date in tqdm(dates):
         generate_traffic_data_for_date(date, GTFS_MONTH, CHAINS)
     

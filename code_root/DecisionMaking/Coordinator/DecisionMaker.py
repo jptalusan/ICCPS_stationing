@@ -135,9 +135,10 @@ class DecisionMaker:
             event_queues = self.load_events(state)
             state = [state]
         else:
-            CHAINS = 4
+            CHAINS = self.pool_thread_count
             event_queues = self.get_event_chains(state)
-            event_queues = event_queues * CHAINS
+            if CHAINS > 0:
+                event_queues = event_queues * CHAINS
             state = [state] * CHAINS
 
         passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=CHAINS)
@@ -151,7 +152,8 @@ class DecisionMaker:
     def get_action(self, states, event_queues, passenger_arrival_distribution):
         # print(event_queues)
         final_action = {}
-
+        # For display
+        sorted_actions = []
         decision_start = time.time()
 
         if self.pool_thread_count == 0:
@@ -174,39 +176,32 @@ class DecisionMaker:
 
             best_actions = dict()
 
+            all_actions = []
+
             for i in range(len(res_dict)):
                 results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
                 actions = [_['action'] for _ in results[0]['scored_actions']]
-
-                all_action_scores = []
+                
                 for action in actions:
-                    action_scores = []
                     for result in results:
                         action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
-                        action_scores.append(action_score['score'])
-
-                    all_action_scores.append({'action': action, 'scores': action_scores})
-
-                avg_action_scores = list()
-                for res in all_action_scores:
-                    avg_action_scores.append({'action': res['action'],
-                                              'avg_score': np.mean(res['scores'])})
-
-                # We want the actions which result in the least passengers left behind
-                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
-
-            # print(f"DecisionMaker scores:{avg_action_scores}")
-
-            best_score = -math.inf
-            overall_best_action = None
-            for _, actions in best_actions.items():
-                if actions['avg_score'] >= best_score:
-                    best_score = actions['avg_score']
-                    overall_best_action = actions['action']
-            final_action = overall_best_action
+                        if action not in [_a['action'] for _a in all_actions]:
+                            all_actions.append({'action':action, 'scores':[action_score['score']], 'visits': [action_score['num_visits']]})
+                        else:
+                            for _a in all_actions:
+                                if _a['action'] == action:
+                                    _a['scores'].append(action_score['score'])
+                                    _a['visits'].append(action_score['num_visits'])
+                            
+            avg_action_scores = list()
+            for action in all_actions:
+                avg_action_scores.append({'action': action['action'],
+                                          'avg_score': np.mean(action['scores']),
+                                          'sum_visits': np.sum(action['visits'])})
+                
+            final_action = max(avg_action_scores, key=lambda _:_['avg_score'])['action']
 
         else:
-
             start_pool_time = time.time()
             with Pool(processes=self.pool_thread_count) as pool:
 
@@ -229,42 +224,36 @@ class DecisionMaker:
 
             best_actions = dict()
 
+            all_actions = []
+
             for i in range(len(res_dict)):
                 results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
                 actions = [_['action'] for _ in results[0]['scored_actions']]
-
-                all_action_scores = []
+                
                 for action in actions:
-                    action_scores = []
                     for result in results:
                         action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
-                        action_scores.append(action_score['score'])
-
-                    all_action_scores.append({'action': action, 'scores': action_scores})
-
-                avg_action_scores = list()
-                for res in all_action_scores:
-                    avg_action_scores.append({'action': res['action'],
-                                              'avg_score': np.mean(res['scores'])})
-
-                # We want the actions which result in the least passengers left behind
-                # best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])['action']
-                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
-
-            # print(f"DecisionMaker scores:{avg_action_scores}")
-
-            best_score = -math.inf
-            overall_best_action = None
-            for _, actions in best_actions.items():
-                if actions['avg_score'] >= best_score:
-                    best_score = actions['avg_score']
-                    overall_best_action = actions['action']
-            final_action = overall_best_action
+                        if action not in [_a['action'] for _a in all_actions]:
+                            all_actions.append({'action':action, 'scores':[action_score['score']], 'visits': [action_score['num_visits']]})
+                        else:
+                            for _a in all_actions:
+                                if _a['action'] == action:
+                                    _a['scores'].append(action_score['score'])
+                                    _a['visits'].append(action_score['num_visits'])
+                            
+            avg_action_scores = list()
+            for action in all_actions:
+                avg_action_scores.append({'action': action['action'],
+                                          'avg_score': np.mean(action['scores']),
+                                          'sum_visits': np.sum(action['visits'])})
+                
+            final_action = max(avg_action_scores, key=lambda _:_['avg_score'])['action']
 
         self.time_taken['decision_maker'] = time.time() - decision_start
 
-        sorted_actions = res_dict[0]['mcts_res']['scored_actions']
-        sorted_actions.sort(key=lambda _: _['score'], reverse=True)
+        # sorted_actions = res_dict[0]['mcts_res']['scored_actions']
+        # sorted_actions.sort(key=lambda _: _['score'], reverse=True)
+        avg_action_scores.sort(key=lambda _: _['avg_score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
 
         # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
@@ -272,7 +261,8 @@ class DecisionMaker:
         print(f"Event counter: {self.event_counter}")
         print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
-        [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
+        # [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
         print(f"Final action: {final_action}")
@@ -335,7 +325,8 @@ class DecisionMaker:
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
-        chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
+        chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
+        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
 
         passenger_arrival_chains = []
         # Oracle
@@ -348,7 +339,7 @@ class DecisionMaker:
             start_time = time.time()
 
             for chain in range(chain_count):
-                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain + 1}.pkl'
+                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain}.pkl'
                 with open(fp, 'rb') as handle:
                     sampled_ons_offs_dict = pickle.load(handle)
                     passenger_arrival_chains.append(sampled_ons_offs_dict)

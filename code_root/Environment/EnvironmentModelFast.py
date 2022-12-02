@@ -116,8 +116,7 @@ class EnvironmentModelFast:
                                               time=time_to_state_change,
                                               type_specific_information={'bus_id': bus_id,
                                                                          'current_block_trip': current_block_trip,
-                                                                         'stop': state.buses[
-                                                                             bus_id].current_stop_number})
+                                                                         'stop': state.buses[bus_id].current_stop_number})
                         new_events.append(arrival_event)
 
                 # Going to next stop
@@ -321,7 +320,7 @@ class EnvironmentModelFast:
                             # _time = max(full_state.time, bus_arrival_time)
                             full_state.buses[bus_id].t_state_change = bus_arrival_time
                             event = Event(event_type=EventType.PASSENGER_LEFT_BEHIND,
-                                          time=bus_arrival_time,
+                                          time=bus_arrival_time + dt.timedelta(seconds=1),
                                           type_specific_information={'bus_id': bus_id})
                             new_events.append(event)
 
