@@ -4,3 +4,6 @@
 !.gitignore
 !readme.md
 !TEST
+!TEST/configs
+!TEST/logs
+!TEST/*
