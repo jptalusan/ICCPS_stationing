@@ -8,9 +8,10 @@ import pandas as pd
 
 class EnvironmentModelFast:
 
-    def __init__(self, travel_model, logger):
+    def __init__(self, travel_model, logger, config):
         self.travel_model = travel_model
         self.logger = logger
+        self.config = config
 
         self.served_trips = []
         self.served_buses = []
@@ -261,6 +262,9 @@ class EnvironmentModelFast:
         remaining = 0
 
         new_events = []
+        
+        passenger_time_to_leave = self.config.get('passenger_time_to_leave_min', 30)
+                
         # TODO: Next time i should just use remaining -> ons
         if route_id_dir in passenger_waiting:
             for passenger_arrival_time, sampled_data in passenger_waiting[route_id_dir].items():
@@ -268,7 +272,7 @@ class EnvironmentModelFast:
                 if passenger_arrival_time > bus_arrival_time:
                     continue
 
-                if bus_arrival_time - passenger_arrival_time <= dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE):
+                if bus_arrival_time - passenger_arrival_time <= dt.timedelta(minutes=passenger_time_to_leave):
                     remaining = sampled_data['remaining']
                     sampled_ons = sampled_data['ons']
                     sampled_offs = sampled_data['offs']
@@ -320,7 +324,7 @@ class EnvironmentModelFast:
                             # _time = max(full_state.time, bus_arrival_time)
                             full_state.buses[bus_id].t_state_change = bus_arrival_time
                             event = Event(event_type=EventType.PASSENGER_LEFT_BEHIND,
-                                          time=bus_arrival_time + dt.timedelta(seconds=1),
+                                          time=bus_arrival_time,
                                           type_specific_information={'bus_id': bus_id})
                             new_events.append(event)
 
@@ -333,7 +337,7 @@ class EnvironmentModelFast:
                     bus_object.total_stops += 1
 
                 # Substitute for the leaving events
-                elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE)):
+                elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=passenger_time_to_leave)):
                     sampled_ons = 0
                     sampled_offs = 0
                     walk_aways = 0

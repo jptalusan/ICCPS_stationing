@@ -187,7 +187,9 @@ class EmpiricalTravelModelLookup:
     def get_list_of_stops_for_trip(self, trip, current_stop_number):
         trip_data = self.trip_plan[trip]
         stop_id_original = trip_data['stop_id_original']
-        stop_id_original = stop_id_original[0:current_stop_number+1]
+        if current_stop_number == 0:
+            current_stop_number = current_stop_number + 1
+        stop_id_original = stop_id_original[0:current_stop_number]
         return stop_id_original
 
     def is_event_a_timepoint(self, curr_event, state):

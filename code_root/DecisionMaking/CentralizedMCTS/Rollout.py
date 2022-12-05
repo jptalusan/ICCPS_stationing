@@ -96,22 +96,18 @@ class BareMinimumRollout:
             valid_actions, _ = environment_model.generate_possible_actions(node.state,
                                                                         node.event_at_node,
                                                                         action_type=ActionType.OVERLOAD_ALLOCATE)
-            # valid_actions = environment_model.generate_possible_actions_OLD(node.state,
-            #                                                                    action_type=ActionType.OVERLOAD_ALLOCATE)
-            
         elif node.event_at_node.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or \
              node.event_at_node.event_type == EventType.PASSENGER_LEFT_BEHIND:
             valid_actions, _ = environment_model.generate_possible_actions(node.state,
                                                                         node.event_at_node,
                                                                         action_type=ActionType.OVERLOAD_DISPATCH)
-            # valid_actions = environment_model.generate_possible_actions_OLD(node.state,
-            #                                                                    action_type=ActionType.OVERLOAD_DISPATCH)
-        # random.seed(100)
-        # action_to_take = random.choice(valid_actions)
         if len(valid_actions) > 0:
-            action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
+            # action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
+            random.seed(100)
+            action_to_take = random.choice(valid_actions)
         else:
             action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         
         # Limit the number of new events generated based on the time horizon!!!

@@ -5,7 +5,7 @@ import numpy as np
 import datetime as dt
 from multiprocessing import Pool
 from Environment.DataStructures.Event import Event
-from Environment.enums import LogType, EventType, BusStatus, BusType
+from Environment.enums import LogType, EventType, BusStatus, BusType, ActionType
 from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 import math
@@ -110,11 +110,11 @@ class DecisionMaker:
                 return None
             return chosen_action
         else:
-            print(f"Event counter: {self.event_counter}")
-            print(f"Event: {state.bus_events[0]}")
-            print(f"Time: {state.time}")
-            print("no available buses")
-            print()
+        #     print(f"Event counter: {self.event_counter}")
+        #     print(f"Event: {state.bus_events[0]}")
+        #     print(f"Time: {state.time}")
+        #     print("no available buses")
+        #     print()
             return None
 
     def any_available_overload_buses(self, state):
@@ -176,30 +176,34 @@ class DecisionMaker:
 
             best_actions = dict()
 
-            all_actions = []
-
             for i in range(len(res_dict)):
                 results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
                 actions = [_['action'] for _ in results[0]['scored_actions']]
-                
+
+                all_action_scores = []
                 for action in actions:
+                    action_scores = []
                     for result in results:
                         action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
-                        if action not in [_a['action'] for _a in all_actions]:
-                            all_actions.append({'action':action, 'scores':[action_score['score']], 'visits': [action_score['num_visits']]})
-                        else:
-                            for _a in all_actions:
-                                if _a['action'] == action:
-                                    _a['scores'].append(action_score['score'])
-                                    _a['visits'].append(action_score['num_visits'])
+                        action_scores.append(action_score['score'])
+
+                    all_action_scores.append({'action': action, 'scores': action_scores})
+
+                avg_action_scores = list()
+                for res in all_action_scores:
+                    avg_action_scores.append({'action': res['action'],
+                                              'avg_score': np.mean(res['scores'])})
+
+                # We want the actions which result in the least passengers left behind
+                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
                             
-            avg_action_scores = list()
-            for action in all_actions:
-                avg_action_scores.append({'action': action['action'],
-                                          'avg_score': np.mean(action['scores']),
-                                          'sum_visits': np.sum(action['visits'])})
-                
-            final_action = max(avg_action_scores, key=lambda _:_['avg_score'])['action']
+            best_score = -math.inf
+            overall_best_action = None
+            for _, actions in best_actions.items():
+                if actions['avg_score'] >= best_score:
+                    best_score = actions['avg_score']
+                    overall_best_action = actions['action']
+            final_action = overall_best_action
 
         else:
             start_pool_time = time.time()
@@ -261,8 +265,10 @@ class DecisionMaker:
         print(f"Event counter: {self.event_counter}")
         print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
-        [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
-        # [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        if self.pool_thread_count == 0:
+            [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+        else:
+            [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
         print(f"Final action: {final_action}")
@@ -326,6 +332,7 @@ class DecisionMaker:
 
     def get_passenger_arrival_distributions(self, chain_count=1):
         chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
+        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TEST'
         # chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
 
         passenger_arrival_chains = []

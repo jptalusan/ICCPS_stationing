@@ -5,7 +5,7 @@ import time
 from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType, EventType
-# import spdlog as spd
+import spdlog as spd
 
 
 class ModularMCTS:
@@ -37,10 +37,12 @@ class ModularMCTS:
 
         self.action_type = action_type
         
-        # spd.FileLogger(name=f'mcts', filename=f'logs/exploit_explore.log', truncate=False, multithreaded=False)
+        self.debug_index = 0
+        
+        # spd.FileLogger(name=f'mcts', filename=f'logs/exploit_explore.log', truncate=False, multithreaded=True)
         # self.logger = spd.get('mcts')
         # self.logger.set_pattern("%v")
-
+        # self.logger.set_level(spd.LogLevel.DEBUG)
     # QUESTION: The event that brought us here is not the event_at_node. Is that correct or weird?
     def solve(self,
               state,
@@ -55,7 +57,22 @@ class ModularMCTS:
                                                                             starting_event_queue[0],
                                                                             self.action_type)
 
+        # TODO: If there is only 1 possible action (NO_OP) don't do MCTS anymore.
+        if len(possible_actions) == 1:
+            scored_actions = []
+            do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            scored_actions.append({'action': do_nothing_action,
+                                   'score': 1,
+                                   'num_visits': 1})
+            
+            return {'scored_actions': scored_actions,
+                    'number_nodes': 0,
+                    'time_taken': self.time_tracker,
+                    # 'tree': root
+                   }
+                
         _root_is_terminal = len(starting_event_queue[1:]) <= 0
+        
         # init tree
         root = TreeNode(state=state,
                         parent=None,
@@ -78,6 +95,7 @@ class ModularMCTS:
             while iter_count < self.iter_limit:
                 iter_count += 1
                 self.execute_iteration(root)
+                self.debug_index += 1
                 # print(f"MCTS {iter_count}")
         else:
             start_processing_time = time.time()
@@ -131,7 +149,6 @@ class ModularMCTS:
 
                 root.children.append(_new_node)
 
-        # best_action = max(root.children, key=lambda _: _.score / _.num_visits).action_to_get_here
         actions_with_scores = self.get_scored_child_actions(root)
 
         return {'scored_actions': actions_with_scores,
@@ -215,15 +232,19 @@ class ModularMCTS:
             time=node.state.time
         )
 
-        immediate_reward, new_event, event_time = self.mdp_environment_model.take_action(_new_state, action_to_take)
+        # Taking action generates new events
+        immediate_reward, new_events, event_time = self.mdp_environment_model.take_action(_new_state, action_to_take)
 
         _new_node_future_event_queue = copy.copy(node.future_events_queue)
-        if new_event is not None:
-            res = self.add_event_to_event_queue(_new_node_future_event_queue, new_event)
+        if new_events is not None:
+            res = self.add_event_to_event_queue(_new_node_future_event_queue, new_events)
 
         _expand_node_depth = node.depth + 1
         _expand_node_event = _new_node_future_event_queue.pop(0)
-        self.process_event(_new_state, _expand_node_event)
+        
+        # Updating the state generates new events
+        new_events2 = self.process_event(_new_state, _expand_node_event)
+        res = self.add_event_to_event_queue(_new_node_future_event_queue, new_events2)
 
         new_possible_actions, actions_taken_tracker = self.get_possible_actions(_new_state,
                                                                                 _expand_node_event,
@@ -270,7 +291,8 @@ class ModularMCTS:
         """
         Moves the state forward in time.
         """
-        self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
+        new_events = self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
+        return new_events
 
     # TODO: Update event to remove other events for an overflow bus
     def add_event_to_event_queue(self, queue, events):
@@ -319,18 +341,21 @@ class ModularMCTS:
     def uct_score(self, node):
         exploit = (node.score / node.num_visits)
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
-
-        # I just copied from Ava's code
-        # scaled_explore_param = self.exploit_explore_tradoff_param * abs(exploit)
         
         # scaled_explore_2 = scaled_explore_param * explore
-        scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
+        
+        # for positive params (reward, served)
+        scaled_explore_2 = -1 * self.exploit_explore_tradoff_param * explore
+        # for negative params (cost, remain)
+        # scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
+        
         score = exploit + scaled_explore_2
         
         # if node.action_to_get_here['type'] == ActionType.OVERLOAD_DISPATCH:
-            # self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
+        #     self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
             # print(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
-        # self.logger.info(f"{exploit:.2f},{explore:.2f}")
+        # print(f"{exploit:.2f},{explore:.2f}")
+        # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
         
         # score = exploit + explore
         return score
