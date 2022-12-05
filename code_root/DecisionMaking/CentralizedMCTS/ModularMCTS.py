@@ -342,6 +342,7 @@ class ModularMCTS:
         exploit = (node.score / node.num_visits)
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
         
+        # print(f"{exploit:.2f},{explore:.2f}")
         # scaled_explore_2 = scaled_explore_param * explore
         
         # for positive params (reward, served)
@@ -354,8 +355,8 @@ class ModularMCTS:
         # if node.action_to_get_here['type'] == ActionType.OVERLOAD_DISPATCH:
         #     self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
             # print(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
-        # print(f"{exploit:.2f},{explore:.2f}")
         # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
+        # print(f"\t{exploit:.2f},{scaled_explore_2:.2f}")
         
         # score = exploit + explore
         return score

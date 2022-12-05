@@ -10,3 +10,4 @@ class State:
         self.buses = buses
         self.bus_events = bus_events
         self.time = time
+        self.trips_with_px_left = {}

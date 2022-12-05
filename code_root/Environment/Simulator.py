@@ -143,7 +143,7 @@ class Simulator:
         if self.save_metrics:
             self.action_taken_log.debug(f"{self.num_events_processed},{self.state.time},{chosen_action}")
         log(self.logger, self.state.time, f"Chosen action:{chosen_action}", LogType.DEBUG)
-        new_events, _ = self.environment_model.take_action(self.state, chosen_action)
+        new_events, _ = self.environment_model.take_action(self.state, chosen_action, baseline=True)
         for event in new_events:
             self.add_event(event)
 

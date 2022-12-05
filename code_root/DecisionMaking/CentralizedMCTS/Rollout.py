@@ -103,7 +103,7 @@ class BareMinimumRollout:
                                                                         action_type=ActionType.OVERLOAD_DISPATCH)
         if len(valid_actions) > 0:
             # action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
-            random.seed(100)
+            # random.seed(100)
             action_to_take = random.choice(valid_actions)
         else:
             action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}

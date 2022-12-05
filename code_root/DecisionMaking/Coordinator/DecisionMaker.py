@@ -183,16 +183,19 @@ class DecisionMaker:
                 all_action_scores = []
                 for action in actions:
                     action_scores = []
+                    action_visits = []
                     for result in results:
                         action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
                         action_scores.append(action_score['score'])
+                        action_visits.append(action_score['num_visits'])
 
-                    all_action_scores.append({'action': action, 'scores': action_scores})
+                    all_action_scores.append({'action': action, 'scores': action_scores, 'num_visits': action_visits})
 
                 avg_action_scores = list()
                 for res in all_action_scores:
                     avg_action_scores.append({'action': res['action'],
-                                              'avg_score': np.mean(res['scores'])})
+                                              'avg_score': np.mean(res['scores']),
+                                              'num_visits': np.mean(res['num_visits'])})
 
                 # We want the actions which result in the least passengers left behind
                 best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
@@ -266,7 +269,7 @@ class DecisionMaker:
         print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
         if self.pool_thread_count == 0:
-            [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['num_visits']}") for sa in avg_action_scores]
         else:
             [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
         print(f"time_taken:{time_taken}")
