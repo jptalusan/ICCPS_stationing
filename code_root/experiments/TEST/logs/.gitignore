@@ -2,7 +2,3 @@
 *
 # Except this file
 !.gitignore
-!TEST
-!TEST/*
-!TEST/configs
-!TEST/logs
