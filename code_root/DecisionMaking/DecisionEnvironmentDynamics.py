@@ -55,6 +55,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             _valid_actions = self.get_valid_allocations(state)
             valid_actions.extend(_valid_actions)
 
+        passenger_time_to_leave = self.config.get('passenger_time_to_leave_min', 30)
+        
         if action_type == ActionType.OVERLOAD_DISPATCH or action_type == ActionType.OVERLOAD_ALL:
             if event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP or \
                     event.event_type == EventType.DECISION_DISPATCH_EVENT or \
@@ -74,10 +76,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     trips_dispatched_to = []
                     for (current_block_trip, passenger_arrival_time, stop_id, stop_no) in trips_with_remaining:
                         if ((stop_no < current_stop_number) or (stop_no == 0)):
-                            if (current_block_trip not in trips_dispatched_to):
-                                trips_dispatched_to.append(current_block_trip)
-                                remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
-                                stops_with_left_behind_passengers.append((stop_id, stop_no, passenger_arrival_time, remain, current_block_trip))
+                                
+                            if (passenger_arrival_time + dt.timedelta(minutes=passenger_time_to_leave)) <= state.time:
+                                if (current_block_trip not in trips_dispatched_to):
+                                    trips_dispatched_to.append(current_block_trip)
+                                    remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
+                                    stops_with_left_behind_passengers.append((stop_id, stop_no, passenger_arrival_time, remain, current_block_trip))
 
                     _valid_actions = [[ActionType.OVERLOAD_DISPATCH], [idle_overload_buses[0]], stops_with_left_behind_passengers]
                     _valid_actions = list(itertools.product(*_valid_actions))
