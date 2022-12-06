@@ -7,6 +7,7 @@ from Environment.DataStructures.State import State
 from Environment.enums import ActionType, EventType
 import spdlog as spd
 
+from fastlogging import LogInit
 
 class ModularMCTS:
 
@@ -43,6 +44,8 @@ class ModularMCTS:
         # self.logger = spd.get('mcts')
         # self.logger.set_pattern("%v")
         # self.logger.set_level(spd.LogLevel.DEBUG)
+        # self.logger = LogInit(pathName=f"logs/1.csv", console=False, colors=False)
+        
     # QUESTION: The event that brought us here is not the event_at_node. Is that correct or weird?
     def solve(self,
               state,
@@ -356,7 +359,7 @@ class ModularMCTS:
         #     self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
             # print(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
         # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
-        # print(f"\t{exploit:.2f},{scaled_explore_2:.2f}")
+        # print(f"{exploit:.2f},{explore:.2f}")
         
         # score = exploit + explore
         return score

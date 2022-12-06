@@ -263,8 +263,6 @@ class DecisionMaker:
         avg_action_scores.sort(key=lambda _: _['avg_score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
 
-        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
-
         print(f"Event counter: {self.event_counter}")
         print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
