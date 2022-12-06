@@ -285,9 +285,6 @@ if __name__ == '__main__':
         bus_plan = json.load(f)
 
     travel_model = EmpiricalTravelModelLookup(DATA_DIR, starting_date_str, logger=None)
-    # sim_environment = EnvironmentModel(travel_model, logger)
-
-    # TODO: Switch dispatch policies with NearestDispatch
     dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
@@ -303,10 +300,10 @@ if __name__ == '__main__':
 
     # HACK: Start
     # Injecting incident
-    # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
-    #                                                 buses=Buses,
-    #                                                 bus_id='706',
-    #                                                 time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
+    bus_arrival_events = manually_insert_disruption(bus_arrival_events,
+                                                    buses=Buses,
+                                                    bus_id='706',
+                                                    time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -325,28 +322,16 @@ if __name__ == '__main__':
 
         log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count - before_count}", LogType.INFO)
 
-    # Inject high boardings in on different vehicles's trips (passenger_arrival_distribution)
-    # passenger_arrival_distribution[('50_TO DOWNTOWN', 5000, 1, 'WALMARTC', pd.Timestamp("2022-03-05 05:32:00"))] = {'sampled_loads': 1.0, 'ons': 20.0, 'offs': 3.0}
-    # passenger_arrival_distribution[('18_FROM DOWNTOWN', 1800, 16, 'ELMTWIEM', pd.Timestamp("2022-03-05 05:26:16"))] = {'sampled_loads': 1.0, 'ons': 20.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('22_TO DOWNTOWN', 2200, 4, 'COUPANEN', pd.Timestamp("2022-03-05 05:43:45"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('14_TO DOWNTOWN', 700, 4, 'TUCDORNN', pd.Timestamp("2022-03-05 04:40:52"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('76_LOOP', 7601, 5, 'NEENEEEF', pd.Timestamp("2022-03-05 06:46:53"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('42_FROM DOWNTOWN', 4200, 18, 'DEL26AEF', pd.Timestamp("2022-03-05 05:46:09"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('28_TO DOWNTOWN', 801, 8, 'LISEDWSN', pd.Timestamp("2022-03-05 11:45:00"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('3_FROM DOWNTOWN', 300, 8, 'WES27AWN', pd.Timestamp("2022-03-05 11:50:24"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('76_LOOP', 7600, 35, 'MAYDUPSN', pd.Timestamp("2022-03-05 11:52:05"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # HACK: End
-
     starting_state = copy.deepcopy(State(stops=Stops,
                                          buses=Buses,
                                          bus_events=bus_arrival_events,
                                          time=bus_arrival_events[0].time))
 
-    mcts_discount_factor = config["mcts_discount_factor"]
     rollout_policy = BareMinimumRollout(rollout_horizon_delta_t=config["rollout_horizon_delta_t"],
                                         dispatch_policy=dispatch_policy)
+    
+    mcts_discount_factor = config["mcts_discount_factor"]
     lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
-    # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = config["uct_tradeoff"]
     pool_thread_count = config["pool_thread_count"]
     iter_limit = config["iter_limit"]

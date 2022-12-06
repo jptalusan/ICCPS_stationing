@@ -14,8 +14,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
     def __init__(self, base_dir, date_str, logger):
-        config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
-        # config_path = f'{base_dir}/trip_plan_{date_str}.json'
+        # config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
+        config_path = f'{base_dir}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
