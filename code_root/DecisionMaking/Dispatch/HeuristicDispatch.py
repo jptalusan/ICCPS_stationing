@@ -57,7 +57,9 @@ class HeuristicDispatch:
         # Nearest overflow
         actions_with_distance = []
         for bus_id in ["41", "42", "43", "44", "45"]:
-            bus_obj = state.buses[bus_id]
+            bus_obj = state.buses.get(bus_id, None)
+            if bus_obj is None:
+                continue
         # for bus_id, bus_obj in state.buses.items():
             if (bus_obj.type == BusType.OVERLOAD) and \
                ((bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)):

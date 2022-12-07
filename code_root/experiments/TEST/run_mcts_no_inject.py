@@ -192,8 +192,7 @@ def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, 
                 latest_datetime = last_stop
 
     # Use actual times and dont round down/up
-    # earliest_datetime = earliest_datetime.replace(minute=0, second=0, microsecond=0)
-    earliest_datetime = earliest_datetime + dt.timedelta(minutes=15)
+    earliest_datetime = earliest_datetime - dt.timedelta(minutes=30)
     if latest_datetime.hour < 23:
         # latest_datetime = latest_datetime.replace(hour=latest_datetime.hour + 1, minute=0, second=0, microsecond=0)
         latest_datetime = latest_datetime + dt.timedelta(minutes=15)
@@ -300,10 +299,10 @@ if __name__ == '__main__':
 
     # HACK: Start
     # Injecting incident
-    bus_arrival_events = manually_insert_disruption(bus_arrival_events,
-                                                    buses=Buses,
-                                                    bus_id='706',
-                                                    time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
+    # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
+    #                                                 buses=Buses,
+    #                                                 bus_id='706',
+    #                                                 time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system

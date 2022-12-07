@@ -4,11 +4,11 @@ import warnings
 import pickle
 import pandas as pd
 import datetime as dt
-from pandas.core.common import SettingWithCopyWarning
+# from pandas.core.common import SettingWithCopyWarning
 from Environment.enums import EventType, ActionType, BusType
 
-warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
-warnings.simplefilter(action='ignore', category=FutureWarning)
+# warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
+# warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
