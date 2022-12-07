@@ -5,8 +5,8 @@ import time
 from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType, EventType
-import spdlog as spd
-
+# import spdlog as spd
+# from fastlogging import LogInit
 
 class ModularMCTS:
 
@@ -43,6 +43,8 @@ class ModularMCTS:
         # self.logger = spd.get('mcts')
         # self.logger.set_pattern("%v")
         # self.logger.set_level(spd.LogLevel.DEBUG)
+        # self.logger = LogInit(pathName="logs/example1.log", console=False, colors=False)
+        
     # QUESTION: The event that brought us here is not the event_at_node. Is that correct or weird?
     def solve(self,
               state,
@@ -343,6 +345,7 @@ class ModularMCTS:
         explore = math.sqrt(math.log(node.parent.num_visits) / node.num_visits)
         
         # print(f"{exploit:.2f},{explore:.2f}")
+        # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
         # scaled_explore_2 = scaled_explore_param * explore
         
         # for positive params (reward, served)
@@ -351,12 +354,5 @@ class ModularMCTS:
         # scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
         
         score = exploit + scaled_explore_2
-        
-        # if node.action_to_get_here['type'] == ActionType.OVERLOAD_DISPATCH:
-        #     self.logger.info(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
-            # print(f"\t{node.action_to_get_here['type']}, exploit:{exploit}, explore:{explore}")
-        # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
-        # print(f"\t{exploit:.2f},{scaled_explore_2:.2f}")
-        
         # score = exploit + explore
         return score

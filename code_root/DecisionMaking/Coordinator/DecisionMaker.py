@@ -334,9 +334,9 @@ class DecisionMaker:
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
-        chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
+        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
         # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TEST'
-        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
+        chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
 
         passenger_arrival_chains = []
         # Oracle

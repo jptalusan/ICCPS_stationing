@@ -66,10 +66,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     trips_with_remaining = self.get_trips_with_remaining_passengers(state)
                         
                     if 'current_block_trip' in event.type_specific_information:
-                        # current_block_trip = event.type_specific_information['current_block_trip']
                         current_stop_number = event.type_specific_information['stop']
                     else:
-                        # current_block_trip = state.buses[bus_id].current_block_trip
                         current_stop_number = state.buses[bus_id].current_stop_number
 
                     stops_with_left_behind_passengers = []
@@ -77,11 +75,10 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     for (current_block_trip, passenger_arrival_time, stop_id, stop_no) in trips_with_remaining:
                         if ((stop_no < current_stop_number) or (stop_no == 0)):
                                 
-                            if (passenger_arrival_time + dt.timedelta(minutes=passenger_time_to_leave)) <= state.time:
-                                if (current_block_trip not in trips_dispatched_to):
-                                    trips_dispatched_to.append(current_block_trip)
-                                    remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
-                                    stops_with_left_behind_passengers.append((stop_id, stop_no, passenger_arrival_time, remain, current_block_trip))
+                            if (current_block_trip not in trips_dispatched_to):
+                                trips_dispatched_to.append(current_block_trip)
+                                remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
+                                stops_with_left_behind_passengers.append((stop_id, stop_no, passenger_arrival_time, remain, current_block_trip))
 
                     _valid_actions = [[ActionType.OVERLOAD_DISPATCH], [idle_overload_buses[0]], stops_with_left_behind_passengers]
                     _valid_actions = list(itertools.product(*_valid_actions))
