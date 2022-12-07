@@ -363,3 +363,5 @@ code_root/experiments/20220305/run_mcts.py
 code_root/experiments/20220305/run_mcts.py
 code_root/experiments/20220305/
 code_root/experiments/20220305/run_mcts.py
+
+*.tar.gz

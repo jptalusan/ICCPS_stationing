@@ -3,3 +3,4 @@ numpy
 tqdm
 pybind11
 spdlog
+smtplib
