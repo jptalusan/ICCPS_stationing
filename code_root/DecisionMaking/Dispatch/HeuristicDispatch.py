@@ -22,7 +22,7 @@ class HeuristicDispatch:
         
         past_stops = self.travel_model.get_list_of_stops_for_trip(current_block_trip[1], current_stop_number + 1)
         max_remaining = -1
-        dispatch_stop = ''
+        dispatch_stop = stop_id
         max_remain_arrival_time = None
         
         for stop_id in past_stops:

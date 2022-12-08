@@ -197,8 +197,22 @@ class EnvironmentModelFast:
                     log(self.logger, new_time,
                         f"Bus {bus_id}: {journey_fraction * 100:.2f}% to {distance_fraction:.2f}/{bus_obj.distance_to_next_stop:.2f} kms to {bus_obj.current_stop_number}")
 
+        # TODO: Need to double check
+        self.clear_remaining_passengers(state)
+
         state.time = new_time
         return new_events
+    
+    def clear_remaining_passengers(self, state):
+        passenger_time_to_leave = self.config.get('passenger_time_to_leave_min', 30)
+        curr_time = state.time
+        #[(current_block_trip, passenger_arrival_time, stop_id, current_stop_number)] = remaining
+        for_deletion = []
+        for (current_block_trip, passenger_arrival_time, stop_id, current_stop_number), remaining in state.trips_with_px_left.items():
+            if (passenger_arrival_time + dt.timedelta(minutes=passenger_time_to_leave)) < curr_time:
+                for_deletion.append((current_block_trip, passenger_arrival_time, stop_id, current_stop_number))
+        for k in for_deletion:
+            del state.trips_with_px_left[k]
 
     # TODO: Bug when overwriting trips with the same route_id_name
     def handle_bus_arrival(self, _new_time, bus_id, full_state, passenger_arrival_distribution):
@@ -325,11 +339,13 @@ class EnvironmentModelFast:
                         # If someone is left behind, immediately flag a decision event
                         if full_state.buses[bus_id].type == BusType.REGULAR:
                             # _time = max(full_state.time, bus_arrival_time)
-                            full_state.buses[bus_id].t_state_change = bus_arrival_time
-                            event = Event(event_type=EventType.PASSENGER_LEFT_BEHIND,
-                                          time=bus_arrival_time,
-                                          type_specific_information={'bus_id': bus_id})
-                            new_events.append(event)
+                            if full_state.buses[bus_id].last_decision_epoch and \
+                                ((full_state.time - full_state.buses[bus_id].last_decision_epoch) > dt.timedelta(minutes=0)):
+                                full_state.buses[bus_id].t_state_change = bus_arrival_time
+                                event = Event(event_type=EventType.PASSENGER_LEFT_BEHIND,
+                                            time=bus_arrival_time,
+                                            type_specific_information={'bus_id': bus_id})
+                                new_events.append(event)
                     else:
                         # Delete trips where passengers were all picked up.
                         key = [k for k, v in full_state.trips_with_px_left.items() if k[1] == passenger_arrival_time and k[2] == stop_id]

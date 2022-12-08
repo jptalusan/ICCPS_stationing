@@ -241,6 +241,7 @@ class Simulator:
                                                                self.state,
                                                                action_type=ActionType.OVERLOAD_DISPATCH)
 
+                self.state.buses[bus_id].last_decision_epoch = self.state.time
                 if chosen_action is None:
                     chosen_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
 
@@ -251,7 +252,6 @@ class Simulator:
                 for event in new_events:
                     self.add_event(event)
                 self.decision_events += 1
-                self.state.buses[bus_id].last_decision_epoch = self.state.time
 
     def decide_and_take_actions_2A(self, update_event, _valid_actions):
         if update_event and \

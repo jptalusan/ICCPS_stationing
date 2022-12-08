@@ -85,7 +85,7 @@ class GreedyCoordinator:
                 _valid_actions = list(itertools.product(*_valid_actions))
                 valid_actions.extend(_valid_actions)
 
-        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': "NO actions."}
         if len(valid_actions) > 0:
             valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
         else:

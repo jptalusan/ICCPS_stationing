@@ -31,6 +31,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         trips_with_remaining = sorted(state.trips_with_px_left, key=state.trips_with_px_left.get, reverse=True)
         if limit:
             trips_with_remaining = trips_with_remaining[0:limit-1]
+        trips_with_remaining = [i for i in trips_with_remaining if i]
         return trips_with_remaining
 
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
@@ -73,7 +74,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     stops_with_left_behind_passengers = []
                     trips_dispatched_to = []
                     for (current_block_trip, passenger_arrival_time, stop_id, stop_no) in trips_with_remaining:
-                        if ((stop_no < current_stop_number) or (stop_no == 0)):
+                        # if ((stop_no <= current_stop_number) or (stop_no == 0)):
+                        if passenger_arrival_time <= state.time:
                             if (current_block_trip not in trips_dispatched_to):
                                 trips_dispatched_to.append(current_block_trip)
                                 remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
@@ -96,7 +98,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             _valid_actions = list(itertools.product(*_valid_actions))
             valid_actions.extend(_valid_actions)
 
-        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': "No actions"}
 
         if len(valid_actions) > 0:
             valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
