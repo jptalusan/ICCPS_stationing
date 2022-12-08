@@ -9,6 +9,7 @@ from Environment.enums import LogType, EventType, BusStatus, BusType, ActionType
 from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 import math
+from fastlogging import LogInit
 
 """
 Combine the two files here:
@@ -96,6 +97,7 @@ class DecisionMaker:
         self.time_taken = {}
 
         self.action_type = None
+        self.logger = LogInit(pathName="logs/decision_maker.log", console=False, colors=False)
 
     # Call the MCTS in parallel here
 
@@ -269,9 +271,10 @@ class DecisionMaker:
         if self.pool_thread_count == 0:
             [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['num_visits']}") for sa in avg_action_scores]
         else:
-            [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
+            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
+        self.logger.debug(f"Decision maker time: {self.time_taken['decision_maker']}")
         print(f"Final action: {final_action}")
         print()
 

@@ -33,8 +33,8 @@ class EmpiricalTravelModelLookup:
         with open(f'{base_dir}/stops_node_matching_dict.pkl', 'rb') as handle:
             self.stop_nodes_dict = pickle.load(handle)
 
-        with open(f'{base_dir}/time_point_dict_{date_str}.pkl', 'rb') as handle:
-            self.time_point_dict = pickle.load(handle)
+        # with open(f'{base_dir}/time_point_dict_{date_str}.pkl', 'rb') as handle:
+        #     self.time_point_dict = pickle.load(handle)
 
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):

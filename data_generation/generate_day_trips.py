@@ -256,7 +256,7 @@ PAST = 5
 NUM_TRIPS = None
 
 def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
-    date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
+    # date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
     # apcdata = get_apc_data_for_date(date_to_predict)
     # df = apcdata.toPandas()
 
@@ -278,6 +278,7 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
 
     # # HACK
     # df = df.query("route_id != 95")
+    # df = df.query("route_id != 89")
     # df = df[~df['stop_id_original'].isin(['PEARL', 'JOHASHEN', 'ROS10AEN'])]
 
     # df = add_features(df)
@@ -333,30 +334,31 @@ def generate_traffic_data_for_date(DATE, GTFS_MONTH, CHAINS):
     # fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
     # trip_res_df.to_pickle(fp)
 
-    DEFAULT_CAPACITY = 40.0
+    DEFAULT_CAPACITY = 10.0
 
     overall_vehicle_plan = {}
-    start_time = '08:00:00'
-    end_time = '12:00:00'
+    # start_time = '08:00:00'
+    # end_time = '12:00:00'
     fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
     trip_res_df = pd.read_pickle(fp)
 
-    start_datetime = dt.datetime.strptime(f"{DATE} {start_time}", "%Y-%m-%d %H:%M:%S")
-    end_datetime = dt.datetime.strptime(f"{DATE} {end_time}", "%Y-%m-%d %H:%M:%S")
+    # start_datetime = dt.datetime.strptime(f"{DATE} {start_time}", "%Y-%m-%d %H:%M:%S")
+    # end_datetime = dt.datetime.strptime(f"{DATE} {end_time}", "%Y-%m-%d %H:%M:%S")
 
-    arr = []
-    for trip_id, trip_df in trip_res_df.groupby('trip_id'):
-        if (trip_df.scheduled_time.min() >= start_datetime) and (trip_df.scheduled_time.max() <= end_datetime):
-            arr.append(trip_df)
+    # arr = []
+    # for trip_id, trip_df in trip_res_df.groupby('trip_id'):
+    #     if (trip_df.scheduled_time.min() >= start_datetime) and (trip_df.scheduled_time.max() <= end_datetime):
+    #         arr.append(trip_df)
 
-    trip_res_df = pd.concat(arr)
+    # trip_res_df = pd.concat(arr)
 
     # TODO: run again with vehicle_capacity (above)
     for vehicle_id, vehicle_df in trip_res_df.groupby('vehicle_id'):
         vehicle_df = vehicle_df.dropna(subset=['arrival_time']).sort_values(['scheduled_time'])
-        vehicle_capacity = vehicle_df.iloc[0].vehicle_capacity
-        if np.isnan(vehicle_capacity):
-            vehicle_capacity = DEFAULT_CAPACITY
+        # vehicle_capacity = vehicle_df.iloc[0].vehicle_capacity
+        vehicle_capacity = DEFAULT_CAPACITY
+        # if np.isnan(vehicle_capacity):
+        #     vehicle_capacity = DEFAULT_CAPACITY
         # TODO: This is not the baseline behavior
         starting_depot = 'MCC5_1'
         service_type = 'regular'
@@ -479,7 +481,9 @@ if __name__ == '__main__':
     CHAINS = 21
     GTFS_MONTH = 'JAN2022'
     # dates = ['2021-03-05']
-    dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
+    # dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
+    # dates = ['2021-06-07', '2021-07-13', '2021-08-25', '2021-05-07']
+    dates = ['2021-06-07', '2021-07-13', '2021-08-25', '2021-05-07']
     for date in tqdm(dates):
         generate_traffic_data_for_date(date, GTFS_MONTH, CHAINS)
     

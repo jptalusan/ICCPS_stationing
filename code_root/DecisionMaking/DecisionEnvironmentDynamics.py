@@ -74,14 +74,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                     trips_dispatched_to = []
                     for (current_block_trip, passenger_arrival_time, stop_id, stop_no) in trips_with_remaining:
                         if ((stop_no < current_stop_number) or (stop_no == 0)):
-                                
-                            # if (passenger_arrival_time + dt.timedelta(minutes=passenger_time_to_leave)) <= state.time:
                             if (current_block_trip not in trips_dispatched_to):
                                 trips_dispatched_to.append(current_block_trip)
                                 remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
                                 stops_with_left_behind_passengers.append((stop_id, stop_no, passenger_arrival_time, remain, current_block_trip))
 
-                    _valid_actions = [[ActionType.OVERLOAD_DISPATCH], [idle_overload_buses[0]], stops_with_left_behind_passengers]
+                    _valid_actions = [[ActionType.OVERLOAD_DISPATCH], ["41"], stops_with_left_behind_passengers]
                     _valid_actions = list(itertools.product(*_valid_actions))
                     valid_actions.extend(_valid_actions)
 
@@ -298,21 +296,21 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         total_passengers_served = 0
         total_aggregate_delay = 0
 
-        total_broken_buses = 0
-        for _, stop_obj in state.stops.items():
-            total_walk_aways += stop_obj.total_passenger_walk_away
-            total_passenger_ons += stop_obj.total_passenger_ons
-            passenger_waiting = stop_obj.passenger_waiting
-            if not passenger_waiting:
-                continue
+        # total_broken_buses = 0
+        # for _, stop_obj in state.stops.items():
+        #     total_walk_aways += stop_obj.total_passenger_walk_away
+        #     total_passenger_ons += stop_obj.total_passenger_ons
+        #     passenger_waiting = stop_obj.passenger_waiting
+        #     if not passenger_waiting:
+        #         continue
 
-            for route_id_dir, route_pw in passenger_waiting.items():
-                if not route_pw:
-                    continue
+        #     for route_id_dir, route_pw in passenger_waiting.items():
+        #         if not route_pw:
+        #             continue
 
-                for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    total_remaining += remaining_passengers
+        #         for arrival_time, pw in route_pw.items():
+        #             remaining_passengers = pw['remaining']
+        #             total_remaining += remaining_passengers
 
         for _, bus_obj in state.buses.items():
             total_deadkms += bus_obj.total_deadkms_moved
