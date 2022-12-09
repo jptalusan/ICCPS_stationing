@@ -359,6 +359,11 @@ class EnvironmentModelFast:
                     bus_object.current_load = bus_object.current_load + got_on_bus - offs
                     bus_object.total_passengers_served += got_on_bus
                     bus_object.total_stops += 1
+                    
+                    log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
+arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
+remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
+                    log(self.logger, _new_time, log_str, LogType.INFO)
 
                 # Substitute for the leaving events
                 elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=passenger_time_to_leave)):
@@ -395,13 +400,11 @@ class EnvironmentModelFast:
                         log(self.logger,
                             _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}",
                             LogType.ERROR)
-                        
 
         log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
 arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
         log(self.logger, _new_time, log_str, LogType.INFO)
-
         return new_events
 
     def take_action(self, state, action, baseline=False):
