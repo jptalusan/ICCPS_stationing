@@ -65,17 +65,13 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 bus_id = event.type_specific_information['bus_id']
                 if state.buses[bus_id].type != BusType.OVERLOAD and state.buses[bus_id].status == BusStatus.IN_TRANSIT:
                     trips_with_remaining = self.get_trips_with_remaining_passengers(state)
-                        
-                    if 'current_block_trip' in event.type_specific_information:
-                        current_stop_number = event.type_specific_information['stop']
-                    else:
-                        current_stop_number = state.buses[bus_id].current_stop_number
 
                     stops_with_left_behind_passengers = []
                     trips_dispatched_to = []
                     for (current_block_trip, passenger_arrival_time, stop_id, stop_no) in trips_with_remaining:
-                        # if ((stop_no <= current_stop_number) or (stop_no == 0)):
                         if passenger_arrival_time <= state.time:
+                            if current_block_trip in state.served_trips:
+                                continue
                             if (current_block_trip not in trips_dispatched_to):
                                 trips_dispatched_to.append(current_block_trip)
                                 remain = state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, stop_no)]
@@ -206,6 +202,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 log(self.logger, state.time,
                     f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
                     LogType.ERROR)
+                
+                state.served_trips.append(current_block_trip)
             ##### END NEW
 
         # Take over broken bus

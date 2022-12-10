@@ -1,6 +1,7 @@
 from Environment.enums import BusStatus, BusType, ActionType
 import random
 import datetime as dt
+from src.utils import *
 
 class HeuristicDispatch:
     
@@ -47,12 +48,12 @@ class HeuristicDispatch:
         # for stop_id in past_stops:
         #     _stop_no = self.travel_model.get_stop_number_at_id(current_block_trip, stop_id)
         #     scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, _stop_no)
-        #     if scheduled_arrival_time <= max_remain_arrival_time - dt.timedelta(minutes=15):
+        #     if scheduled_arrival_time <= max_remain_arrival_time - dt.timedelta(minutes=PASSENGER_TIME_TO_LEAVE/2):
         #         dispatch_stop = stop_id
         #         break
             
         current_stop_number = self.travel_model.get_stop_number_at_id(current_block_trip, dispatch_stop)
-        stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
+        # stop_id = self.travel_model.get_stop_id_at_number(current_block_trip, current_stop_number)
         
         # Nearest overflow
         actions_with_distance = []
@@ -72,4 +73,4 @@ class HeuristicDispatch:
         actions_with_distance = sorted(actions_with_distance, key=lambda x: x[1], reverse=False)
         bus_id = actions_with_distance[0][0]
         # # For now, just send to first stop.
-        return {'bus_id': bus_id, 'current_block_trip': current_block_trip, 'stop_no': current_stop_number, 'stop_id': stop_id}
+        return {'bus_id': bus_id, 'current_block_trip': current_block_trip, 'stop_no': current_stop_number, 'stop_id': dispatch_stop}

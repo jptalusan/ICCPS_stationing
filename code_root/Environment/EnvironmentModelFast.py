@@ -211,7 +211,17 @@ class EnvironmentModelFast:
         for (current_block_trip, passenger_arrival_time, stop_id, current_stop_number), remaining in state.trips_with_px_left.items():
             if (passenger_arrival_time + dt.timedelta(minutes=passenger_time_to_leave)) < curr_time:
                 for_deletion.append((current_block_trip, passenger_arrival_time, stop_id, current_stop_number))
+                
         for k in for_deletion:
+            (current_block_trip, passenger_arrival_time, stop_id, current_stop_number) = k
+
+            passenger_waiting = state.stops[stop_id].passenger_waiting
+            for route_id_dir, v in passenger_waiting.items():
+                if passenger_arrival_time in passenger_waiting[route_id_dir]:
+                    passenger_waiting[route_id_dir][passenger_arrival_time]['remaining'] = 0
+                    remaining = state.trips_with_px_left[k]
+                    state.stops[stop_id].total_passenger_walk_away += remaining
+                    log(self.logger, state.time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
             del state.trips_with_px_left[k]
 
     # TODO: Bug when overwriting trips with the same route_id_name
@@ -364,7 +374,6 @@ class EnvironmentModelFast:
 arrives at @ {stop_id}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                     log(self.logger, _new_time, log_str, LogType.INFO)
-
                 # Substitute for the leaving events
                 elif passenger_arrival_time < (bus_arrival_time - dt.timedelta(minutes=passenger_time_to_leave)):
                     sampled_ons = 0
@@ -459,6 +468,8 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 log(self.logger, state.time,
                     f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
                     LogType.ERROR)
+                
+                state.served_trips.append(current_block_trip)
             #### END NEW
 
         # Take over broken bus

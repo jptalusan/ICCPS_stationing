@@ -296,11 +296,13 @@ class ModularMCTS:
         new_events = self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
         return new_events
 
-    # TODO: Update event to remove other events for an overflow bus
     def add_event_to_event_queue(self, queue, events):
         if len(events) == 0:
             return False
 
+        # for event in events:
+        #     queue.append(event)
+        # queue.sort(key=lambda _: _.time, reverse=False)
         event = events[0]
         if event:
             queue.append(event)

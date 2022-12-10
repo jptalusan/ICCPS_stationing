@@ -112,11 +112,11 @@ class DecisionMaker:
                 return None
             return chosen_action
         else:
-        #     print(f"Event counter: {self.event_counter}")
-        #     print(f"Event: {state.bus_events[0]}")
-        #     print(f"Time: {state.time}")
-        #     print("no available buses")
-        #     print()
+            print(f"Event counter: {self.event_counter}")
+            print(f"Event: {state.bus_events[0]}")
+            print(f"Time: {state.time}")
+            print("no available buses")
+            print()
             return None
 
     def any_available_overload_buses(self, state):
