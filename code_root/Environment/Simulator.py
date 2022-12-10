@@ -116,7 +116,7 @@ class Simulator:
                 break
         print("Done")
 
-        self.print_states()
+        self.print_states(csv=True)
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
 
     def decide_and_take_actions_baseline(self, update_event, _valid_actions):
@@ -339,31 +339,52 @@ class Simulator:
             self.bus_metrics_log.debug(
                 f"{self.num_events_processed},{log_time},{bus_id},{status},{bus_type},{capacity},{current_load},{current_block},{current_trip},{current_stop},{time_at_last_stop},{total_passengers_served},{deadkms_moved},{servicekms_moved}")
 
-    def print_states(self):
+    def print_states(self, csv=False):
         LOGTYPE = LogType.INFO
-        log(self.logger, dt.datetime.now(), f"Total events processed: {self.num_events_processed}", LOGTYPE)
-        log(self.logger, dt.datetime.now(), f"Total decision epochs: {self.decision_events}", LOGTYPE)
-        for bus_id, bus_obj in self.state.buses.items():
-            log(self.logger, dt.datetime.now(), f"--Bus ID: {bus_id}--", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)
-            log(self.logger, dt.datetime.now(),
-                f"aggregate delay_time: {(bus_obj.delay_time / bus_obj.total_stops):.2f} s", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"total_service_time: {bus_obj.total_service_time:.2f}", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"total_passengers_served: {bus_obj.total_passengers_served}", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km",
-                LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"current_stop: {bus_obj.current_stop}", LOGTYPE)
-            log(self.logger, dt.datetime.now(), f"status: {bus_obj.status}", LOGTYPE)
-
-        for stop_id, stop_obj in self.state.stops.items():
-            if stop_obj.total_passenger_walk_away > 0:
-                log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
-                log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
-                log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
-                log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}",
+        log(self.logger, None, f"Total events processed: {self.num_events_processed}", LOGTYPE)
+        log(self.logger, None, f"Total decision epochs: {self.decision_events}", LOGTYPE)
+        if not csv:
+            for bus_id, bus_obj in self.state.buses.items():
+                log(self.logger, None, f"--Bus ID: {bus_id}--", LOGTYPE)
+                log(self.logger, None, f"total dwell_time: {bus_obj.dwell_time:.2f} s", LOGTYPE)
+                log(self.logger, None,
+                    f"aggregate delay_time: {(bus_obj.delay_time / bus_obj.total_stops):.2f} s", LOGTYPE)
+                log(self.logger, None, f"total_service_time: {bus_obj.total_service_time:.2f}", LOGTYPE)
+                log(self.logger, None, f"total_passengers_served: {bus_obj.total_passengers_served}", LOGTYPE)
+                log(self.logger, None, f"total_servicekms_moved: {bus_obj.total_servicekms_moved:.2f} km",
                     LOGTYPE)
+                log(self.logger, None, f"total_deadkms_moved: {bus_obj.total_deadkms_moved:.2f} km", LOGTYPE)
+                log(self.logger, None, f"current_stop: {bus_obj.current_stop}", LOGTYPE)
+                log(self.logger, None, f"status: {bus_obj.status}", LOGTYPE)
 
+            for stop_id, stop_obj in self.state.stops.items():
+                # if stop_obj.total_passenger_walk_away > 0:
+                log(self.logger, None, f"--Stop ID: {stop_id}--", LOGTYPE)
+                log(self.logger, None, f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
+                log(self.logger, None, f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
+                log(self.logger, None, f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}",LOGTYPE)
+        
+        else:
+            log(self.logger, None, "bus_id,dwell_time,agg_delay,service_time,total_served,service_kms,current_stop,status", LOGTYPE)
+            for bus_id, bus_obj in self.state.buses.items():
+                a = bus_id
+                b = f"{bus_obj.dwell_time:.2f}"
+                c = f"{(bus_obj.delay_time / bus_obj.total_stops):.2f}"
+                d = f"{bus_obj.total_service_time:.2f}"
+                e = f"{bus_obj.total_passengers_served}"
+                f = f"{bus_obj.total_deadkms_moved:.2f}"
+                g = f"{bus_obj.current_stop}"
+                h = f"{bus_obj.status}"
+                log(self.logger, None, f"{a},{b},{c},{d},{e},{f},{g},{h}", LOGTYPE)
+
+            log(self.logger, None, "stop_id,total_passenger_ons,total_passenger_offs,total_passenger_walk_away,total_served,service_kms,current_stop,status", LOGTYPE)
+            for stop_id, stop_obj in self.state.stops.items():
+                a = stop_id
+                b = f"{stop_obj.total_passenger_ons}"
+                c = f"{stop_obj.total_passenger_offs}"
+                d = f"{stop_obj.total_passenger_walk_away}"
+                log(self.logger, None, f"{a},{b},{c},{d}", LOGTYPE)
+        
         total_walk_aways = 0
         total_arrivals = 0
         total_boardings = 0
@@ -372,21 +393,10 @@ class Simulator:
             total_boardings += stop_obj.total_passenger_ons
             total_arrivals += stop_obj.total_passenger_ons + stop_obj.total_passenger_walk_away
 
-        log(self.logger, dt.datetime.now(), f"Count of all passengers: {total_arrivals}", LOGTYPE)
-        log(self.logger, dt.datetime.now(), f"Count of all passengers who boarded: {total_boardings}", LOGTYPE)
-        log(self.logger, dt.datetime.now(), f"Count of all passengers who left: {total_walk_aways}", LOGTYPE)
-
-        # for stop_id, stop_obj in self.state.stops.items():
-        #     log(self.logger, dt.datetime.now(), f"--Stop ID: {stop_id}--", LOGTYPE)
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_ons: {stop_obj.total_passenger_ons}", LOGTYPE)
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_offs: {stop_obj.total_passenger_offs}", LOGTYPE)
-        #     log(self.logger, dt.datetime.now(), f"total_passenger_walk_away: {stop_obj.total_passenger_walk_away}", LOGTYPE)
-        # total_walk_aways += stop_obj.total_passenger_walk_away
-        # total_boardings += stop_obj.total_passenger_ons
-        # total_arrivals += total_boardings + total_walk_aways
-        # log(self.logger, dt.datetime.now(), f"Count of all passengers: {total_arrivals}", LOGTYPE)
-        # log(self.logger, dt.datetime.now(), f"Count of all passengers who boarded: {total_boardings}", LOGTYPE)
-        # log(self.logger, dt.datetime.now(), f"Count of all passengers who left: {total_walk_aways}", LOGTYPE)
+        log(self.logger, None, f"Count of all passengers: {total_arrivals}", LOGTYPE)
+        log(self.logger, None, f"Count of all passengers who boarded: {total_boardings}", LOGTYPE)
+        log(self.logger, None, f"Count of all passengers who left: {total_walk_aways}", LOGTYPE)
+        
 
     def save_visualization(self, event_time, granularity_s=None):
         if not self.last_visual_log:
