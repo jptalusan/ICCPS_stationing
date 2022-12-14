@@ -22,7 +22,8 @@ def send_email(config):
     # start TLS for security which makes the connection more secure
     smtpobj.starttls()
     senderemail_id = "jptalusan@gmail.com"
-    senderemail_id_password = "bhgbzkzzwgrhnpji"
+    # Generate your own app password here: https://support.google.com/accounts/answer/185833?hl=en
+    senderemail_id_password = "XXXXYYYYXXXXYYYY"
     receiveremail_id = "jptalusan@gmail.com"
     # Authentication for signing to gmail account
     smtpobj.login(senderemail_id, senderemail_id_password)

@@ -289,8 +289,6 @@ if __name__ == '__main__':
     valid_actions = None
 
     starting_date = dt.datetime.strptime(starting_date_str, '%Y%m%d')
-    starting_time = dt.time(0, 0, 0)
-    starting_datetime = dt.datetime.combine(starting_date, starting_time)
 
     Buses, Stops = load_initial_state(starting_date_str, bus_plan, trip_plan)
 
