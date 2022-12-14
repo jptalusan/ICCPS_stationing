@@ -18,8 +18,6 @@ from copy import deepcopy
 from tqdm import tqdm
 from pathlib import Path
 import shutil
-
-
 mpl.rcParams['figure.facecolor'] = 'white'
 
 import warnings
@@ -112,7 +110,6 @@ def prepare_input_data(input_df, ohe_encoder, label_encoders, num_scaler, column
 
     # OHE
     input_df[ohe_encoder.get_feature_names_out()] = ohe_encoder.transform(input_df[ohe_columns]).toarray()
-    # input_df = input_df.drop(columns=ohe_columns)
 
     # Label encoder
     for cat in cat_columns:
@@ -136,8 +133,7 @@ def assign_data_to_bins(df, TARGET='load'):
     df['y_class'] = mycut.codes
     return df
 
-TIMEWINDOW = 15
-def add_features(df):
+def add_features(df, TIMEWINDOW=15):
     df = df[df.arrival_time.notna()]
     df = df.fillna(method="bfill")
 
@@ -253,25 +249,15 @@ def fix_time(d, x):
 
 def merge_overload_regular_bus_trips(regular, overload):
     m = regular.merge(overload, how='left', on=['trip_id', 'transit_date', 'scheduled_time', 'block_abbr', 'stop_sequence', 'stop_id_original', 'route_id_dir', 'route_id'])
-    
     m['arrival_time'] = np.max(m[['arrival_time_x', 'arrival_time_y']], axis=1)
-    
     m['zero_load_at_trip_end'] = m['zero_load_at_trip_end_x']
-    
     m.loc[~m['arrival_time_x'].isnull(), "load"] = m['load_x']
-    # m.loc[~m['arrival_time_x'].isnull(), "ons"] = m['ons_x']
-    # m.loc[~m['arrival_time_x'].isnull(), "offs"] = m['offs_x']
-    
     m.loc[~m['arrival_time_y'].isnull(), "load"] = m['load_y']
-    # m.loc[~m['arrival_time_y'].isnull(), "ons"] = m['ons_y']
-    # m.loc[~m['arrival_time_y'].isnull(), "offs"] = m['offs_y']
-    
     m['vehicle_id'] = m['vehicle_id_x']
     m['vehicle_capacity'] = m['vehicle_capacity_x']
     m['overload_id'] = m['overload_id_x']
     m = m[m.columns.drop(list(m.filter(regex='_x')))]
     m = m[m.columns.drop(list(m.filter(regex='_y')))]
-    # m = m[regular.columns]
     return m
 
 # Load model
@@ -290,22 +276,8 @@ NUM_TRIPS = None
 
 def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
     date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
-    
-    # HACK
-    # a = df.query("trip_id == '259845' and vehicle_id == '1818'").sort_values('stop_sequence')
-    # b = df.query("trip_id == '259845' and vehicle_id == '2008'").sort_values('stop_sequence')
-    # m1 = merge_overload_regular_bus_trips(a, b)
-
-    # a = df.query("trip_id == '259635' and vehicle_id == '2019'").sort_values('stop_sequence')
-    # b = df.query("trip_id == '259635' and vehicle_id == '1914'").sort_values('stop_sequence')
-    # m2 = merge_overload_regular_bus_trips(a, b)
-
     df = df.query("overload_id == 0")
-    # overload_trips = df.query("overload_id > 0").trip_id.unique()
-    # tdf = tdf[~tdf['trip_id'].isin(overload_trips)]
-    # df = pd.concat([tdf, m1, m2])
     df = df.dropna(subset=['arrival_time'])
-    # df = df.fillna(method='ffill').fillna(method='bfill')
 
     # HACK
     df = df.query("route_id != 95")
@@ -339,7 +311,6 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
             
             # Introducing stochasticity
             y_pred = [np.random.choice(len(ypp.flatten()), size=1, p=ypp.flatten())[0] for ypp in y_pred_probs]
-        
             loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in y_pred]
             
             _raw_df = raw_df.loc[_df.index]
@@ -362,7 +333,6 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
                 'y_pred_classes', 'y_pred_probs', 'sampled_loads', 'vehicle_id', 'vehicle_capacity']
     trip_res_df = trip_res[_columns]
 
-    # fp = 'results/sampled_loads.pkl'
     fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
     trip_res_df.to_pickle(fp)
 
@@ -444,9 +414,6 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
 
     with open(f'results/trip_plan_{DATE.replace("-", "")}.json', 'w') as fp:
         json.dump(overall_trip_plan, fp, sort_keys=True, indent=2)
-        
-    # fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
-    # trip_res = pd.read_pickle(fp)
 
     for chain in tqdm(range(CHAINS)):
         loads = [random.randint(percentiles[yp][0], percentiles[yp][1]) for yp in trip_res_df.y_pred_classes]
@@ -508,23 +475,33 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
     #     pickle.dump(time_point_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
-    GTFS_MONTH = 'OCT2021'
+    config = {
+        "number_of_overload_buses": 5,
+        "capacities_of_overload_buses": 55,
+        "is_date_range": True,
+        "date": "2021-10-24",
+        "start_date": "2021-10-24",
+        "end_date": "2021-10-31",
+        "frequency_h": 24,
+        "GTFS_month": "OCT2021",
+        "chains": 21
+    }
     
-    CHAINS = 21
-    # GTFS_MONTH = 'JAN2022'
-    # dates = ['2021-03-05']
-    # dates = ['2021-10-18', '2021-11-23', '2021-12-15', '2022-01-27', '2022-02-25', '2022-03-26', '2022-04-02']
-    # dates = [
-            #  '2021-10-01', '2021-10-02', '2021-10-03', '2021-10-04', '2021-10-05', '2021-10-06', '2021-10-07', '2021-10-08', '2021-10-09', '2021-10-10', 
-            #  '2021-10-11', '2021-10-12', '2021-10-13', '2021-10-14', '2021-10-15', '2021-10-16', '2021-10-17', '2021-10-18', '2021-10-19', '2021-10-20', 
-            #  '2021-10-21', '2021-10-22', '2021-10-23']
-    dates = ['2021-10-24', '2021-10-25', '2021-10-26', '2021-10-27', '2021-10-28', '2021-10-29', '2021-10-30', '2021-10-31']
-    apcdata = get_apc_data_for_daterange('2021-10-24', '2021-10-31')
+    GTFS_MONTH = config["GTFS_month"]
+    CHAINS = config["chains"]
+
+    dates = pd.date_range(config["start_date"], config["end_date"], freq=f'{config["frequency_h"]}h')
+    dates = [dr.strftime('%Y-%m-%d') for dr in dates]
+    
+    if config["is_date_range"]:
+        apcdata = get_apc_data_for_daterange(config["start_date"], config["end_date"])
+    else:
+        apcdata = get_apc_data_for_date(config["date"])
+        
     df = apcdata.toPandas()
-    print(df.shape)
+    
     for date in tqdm(dates):
         a = df.query("transit_date == @date")
-        print(a.shape)
         generate_traffic_data_for_date(a, date, GTFS_MONTH, CHAINS)
 
     # Reorganize files after generation
