@@ -356,4 +356,6 @@ code_root/run_mctsall.py
 data_generation/test.ipynb
 code_root/run_mcts_20211123.py
 
+code_root/experiments/*
 
+*.tar.gz

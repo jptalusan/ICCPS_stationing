@@ -44,16 +44,25 @@ def time_since_midnight_in_seconds(datetime_time):
     return seconds
 
 
-def log(logger, curr_time, message, type=LogType.DEBUG):
+def log(logger, curr_time=None, message=None, type=LogType.DEBUG):
     if logger is None:
         return
     
     if type == LogType.DEBUG:
         # self.logger.debug(f"[{seconds_epoch_to_str(curr_time)}] {message}")
-        logger.debug(f"[{datetime_to_str(curr_time)}] {message}")
+        if curr_time:
+            logger.debug(f"[{datetime_to_str(curr_time)}] {message}")
+        else:
+            logger.debug(f"{message}")
     if type == LogType.ERROR:
         # self.logger.error(f"[{seconds_epoch_to_str(curr_time)}] {message}")
-        logger.error(f"[{datetime_to_str(curr_time)}] {message}")
+        if curr_time:
+            logger.error(f"[{datetime_to_str(curr_time)}] {message}")
+        else:
+            logger.debug(f"{message}")
     if type == LogType.INFO:
         # self.logger.info(f"[{seconds_epoch_to_str(curr_time)}] {message}")
-        logger.info(f"[{datetime_to_str(curr_time)}] {message}")
+        if curr_time:
+            logger.info(f"[{datetime_to_str(curr_time)}] {message}")
+        else:
+            logger.debug(f"{message}")

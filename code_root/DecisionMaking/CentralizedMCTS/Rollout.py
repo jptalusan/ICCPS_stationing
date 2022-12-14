@@ -106,7 +106,7 @@ class BareMinimumRollout:
             random.seed(100)
             action_to_take = random.choice(valid_actions)
         else:
-            action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+            action_to_take = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': "No actions RO."}
             
         immediate_reward, new_events, event_time = environment_model.take_action(node.state, action_to_take)
         

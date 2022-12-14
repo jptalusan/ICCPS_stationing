@@ -17,7 +17,6 @@ class GreedyCoordinator:
 
     def event_processing_callback_funct(self, actions, state, action_type):
         valid_actions = self.generate_possible_actions(state, action_type)
-        # action_to_take = self.dispatch_policy.select_overload_to_dispatch(state, valid_actions)
         action_to_take = self.select_overload_to_dispatch(state, valid_actions)
         if action_to_take['type'] == ActionType.OVERLOAD_DISPATCH:
             self.trips_already_covered.append(action_to_take['info'][4])
@@ -63,11 +62,12 @@ class GreedyCoordinator:
 
                         if remaining_passengers > 0:
                             if block_trip not in self.trips_already_covered:
+                                current_stop_number = self.travel_model.get_stop_number_at_id(block_trip, stop_id)
                                 stops_with_left_behind_passengers.append((stop_id,
-                                                                        route_id_dir,
-                                                                        arrival_time,
-                                                                        remaining_passengers,
-                                                                        block_trip))
+                                                                          current_stop_number,
+                                                                          arrival_time,
+                                                                          remaining_passengers,
+                                                                          block_trip))
 
             _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
                                 stops_with_left_behind_passengers]
@@ -85,7 +85,7 @@ class GreedyCoordinator:
                 _valid_actions = list(itertools.product(*_valid_actions))
                 valid_actions.extend(_valid_actions)
 
-        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}
+        do_nothing_action = {'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': "NO actions."}
         if len(valid_actions) > 0:
             valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
         else:
@@ -102,7 +102,7 @@ class GreedyCoordinator:
             return []
 
         # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
-        valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
+        valid_stops = ['MTA', 'MCC5_1', 'NOLTAYSN', 'DWMRT', 'WHICHASF']
 
         # Based on spatial clustering k = 10
         idle_overload_buses = []

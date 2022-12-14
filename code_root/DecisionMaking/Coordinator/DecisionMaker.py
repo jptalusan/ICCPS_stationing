@@ -9,6 +9,7 @@ from Environment.enums import LogType, EventType, BusStatus, BusType, ActionType
 from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
 from src.utils import *
 import math
+from fastlogging import LogInit
 
 """
 Combine the two files here:
@@ -73,7 +74,8 @@ class DecisionMaker:
                  allowed_computation_time,
                  starting_date,
                  oracle,
-                 base_dir):
+                 base_dir,
+                 config):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -91,11 +93,13 @@ class DecisionMaker:
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
         self.oracle = oracle
         self.base_dir = base_dir
+        self.config = config
 
         self.starting_date = starting_date
         self.time_taken = {}
 
         self.action_type = None
+        self.logger = LogInit(pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False)
 
     # Call the MCTS in parallel here
 
@@ -110,11 +114,11 @@ class DecisionMaker:
                 return None
             return chosen_action
         else:
-        #     print(f"Event counter: {self.event_counter}")
-        #     print(f"Event: {state.bus_events[0]}")
-        #     print(f"Time: {state.time}")
-        #     print("no available buses")
-        #     print()
+            print(f"Event counter: {self.event_counter}")
+            print(f"Event: {state.bus_events[0]}")
+            print(f"Time: {state.time}")
+            print("no available buses")
+            print()
             return None
 
     def any_available_overload_buses(self, state):
@@ -183,16 +187,19 @@ class DecisionMaker:
                 all_action_scores = []
                 for action in actions:
                     action_scores = []
+                    action_visits = []
                     for result in results:
                         action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
                         action_scores.append(action_score['score'])
+                        action_visits.append(action_score['num_visits'])
 
-                    all_action_scores.append({'action': action, 'scores': action_scores})
+                    all_action_scores.append({'action': action, 'scores': action_scores, 'num_visits': action_visits})
 
                 avg_action_scores = list()
                 for res in all_action_scores:
                     avg_action_scores.append({'action': res['action'],
-                                              'avg_score': np.mean(res['scores'])})
+                                              'avg_score': np.mean(res['scores']),
+                                              'num_visits': np.mean(res['num_visits'])})
 
                 # We want the actions which result in the least passengers left behind
                 best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
@@ -260,17 +267,16 @@ class DecisionMaker:
         avg_action_scores.sort(key=lambda _: _['avg_score'], reverse=True)
         time_taken = res_dict[0]['mcts_res']['time_taken']
 
-        # print(f"DecisionMaker event:{res_dict[0]['mcts_res']['tree'].event_at_node}")
-
         print(f"Event counter: {self.event_counter}")
         print(f"Event: {event_queues[0][0]}")
         print(f"Time: {states[0].time}")
         if self.pool_thread_count == 0:
-            [print(f"{sa['action']['type']}, {sa['score']:.0f}, {sa['num_visits']}") for sa in sorted_actions]
+            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['num_visits']}") for sa in avg_action_scores]
         else:
-            [print(f"{sa['action']['type']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
+            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
         print(f"time_taken:{time_taken}")
         print(f"Decision maker time: {self.time_taken}")
+        self.logger.debug(f"Decision maker time: {self.time_taken['decision_maker']}")
         print(f"Final action: {final_action}")
         print()
 
@@ -331,14 +337,14 @@ class DecisionMaker:
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
-        chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
+        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
         # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TEST'
-        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
+        chain_dir = f'{self.base_dir}/chains'
 
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'{self.base_dir}/data/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(f'{self.base_dir}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains

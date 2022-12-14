@@ -1,13 +1,13 @@
 import sys
 
 BASE_DIR = '../../../code_root'
-DATA_DIR = f'{BASE_DIR}/scenarios/baseline/data'
 sys.path.append(BASE_DIR)
 
 # All dates and times should just be datetime!
 from DecisionMaking.Coordinator.DecisionMaker import DecisionMaker
 from DecisionMaking.Coordinator.GreedyCoordinator import GreedyCoordinator
 from DecisionMaking.Dispatch.SendNearestDispatchPolicy import SendNearestDispatchPolicy
+from DecisionMaking.Dispatch.HeuristicDispatch import HeuristicDispatch
 from DecisionMaking.DecisionEnvironmentDynamics import DecisionEnvironmentDynamics
 from DecisionMaking.CentralizedMCTS.Rollout import BareMinimumRollout
 from Environment.DataStructures.Bus import Bus
@@ -28,9 +28,6 @@ import numpy as np
 import pandas as pd
 import spdlog as spd
 import datetime as dt
-import smtplib
-import time
-from collections import deque
 
 
 def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
@@ -84,6 +81,7 @@ def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
 
 
 def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
+    datetime_str = dt.datetime.strptime(starting_date, '%Y%m%d')
     print("Adding events...")
     np.random.seed(random_seed)
     has_broken = False
@@ -96,7 +94,7 @@ def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file
     # Includes: Trip starts, passenger sampling
     # all active stops that buses will pass
     events = []
-    saved_events = f'scenarios/baseline/data/{event_file}'
+    saved_events = f'scenarios/testset/{datetime_str}/{event_file}'
 
     _starting_date_str = dt.datetime.strptime(starting_date, '%Y%m%d').strftime('%Y-%m-%d')
 
@@ -191,8 +189,7 @@ def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, 
                 latest_datetime = last_stop
 
     # Use actual times and dont round down/up
-    # earliest_datetime = earliest_datetime.replace(minute=0, second=0, microsecond=0)
-    earliest_datetime = earliest_datetime + dt.timedelta(minutes=15)
+    earliest_datetime = earliest_datetime - dt.timedelta(minutes=30)
     if latest_datetime.hour < 23:
         # latest_datetime = latest_datetime.replace(hour=latest_datetime.hour + 1, minute=0, second=0, microsecond=0)
         latest_datetime = latest_datetime + dt.timedelta(minutes=15)
@@ -269,7 +266,8 @@ if __name__ == '__main__':
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config['starting_date_str']
-    config_path = f'{BASE_DIR}/scenarios/baseline/data/trip_plan_{starting_date_str}.json'
+    DATA_DIR = f'{BASE_DIR}/scenarios/testset/{starting_date_str}'
+    config_path = f'{BASE_DIR}/scenarios/testset/{starting_date_str}/trip_plan_{starting_date_str}.json'
     with open(config_path) as f:
         trip_plan = json.load(f)
 
@@ -282,11 +280,9 @@ if __name__ == '__main__':
 
     with open(config_path) as f:
         bus_plan = json.load(f)
-
-    travel_model = EmpiricalTravelModelLookup(DATA_DIR, starting_date_str, logger=None)
-    # sim_environment = EnvironmentModel(travel_model, logger)
-
-    # TODO: Switch dispatch policies with NearestDispatch
+        
+    LOOKUP_DIR = f'{BASE_DIR}/scenarios'
+    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, logger=None)
     dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
@@ -304,8 +300,8 @@ if __name__ == '__main__':
     # Injecting incident
     # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
     #                                                 buses=Buses,
-    #                                                 bus_id='706',
-    #                                                 time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
+    #                                                 bus_id='1830',
+    #                                                 time=str_timestamp_to_datetime('2021-12-15 09:45:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -315,8 +311,9 @@ if __name__ == '__main__':
     # Adding interval events
     if config["use_intervals"]:
         before_count = len(bus_arrival_events)
-        bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan,
-                                                               intervals=15)
+        if config["reallocation"]:
+            bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan,
+                                                                intervals=15)
         if config["scenario"] == "2A":
             bus_arrival_events = manually_insert_dispatch_events(bus_arrival_events, starting_date, Buses, trip_plan,
                                                                  intervals=15)
@@ -324,36 +321,25 @@ if __name__ == '__main__':
 
         log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count - before_count}", LogType.INFO)
 
-    # Inject high boardings in on different vehicles's trips (passenger_arrival_distribution)
-    # passenger_arrival_distribution[('50_TO DOWNTOWN', 5000, 1, 'WALMARTC', pd.Timestamp("2022-03-05 05:32:00"))] = {'sampled_loads': 1.0, 'ons': 20.0, 'offs': 3.0}
-    # passenger_arrival_distribution[('18_FROM DOWNTOWN', 1800, 16, 'ELMTWIEM', pd.Timestamp("2022-03-05 05:26:16"))] = {'sampled_loads': 1.0, 'ons': 20.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('22_TO DOWNTOWN', 2200, 4, 'COUPANEN', pd.Timestamp("2022-03-05 05:43:45"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('14_TO DOWNTOWN', 700, 4, 'TUCDORNN', pd.Timestamp("2022-03-05 04:40:52"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('76_LOOP', 7601, 5, 'NEENEEEF', pd.Timestamp("2022-03-05 06:46:53"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('42_FROM DOWNTOWN', 4200, 18, 'DEL26AEF', pd.Timestamp("2022-03-05 05:46:09"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('28_TO DOWNTOWN', 801, 8, 'LISEDWSN', pd.Timestamp("2022-03-05 11:45:00"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('3_FROM DOWNTOWN', 300, 8, 'WES27AWN', pd.Timestamp("2022-03-05 11:50:24"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # passenger_arrival_distribution[('76_LOOP', 7600, 35, 'MAYDUPSN', pd.Timestamp("2022-03-05 11:52:05"))] = {'sampled_loads': 1.0, 'ons': 30.0, 'offs': 0.0}
-    # HACK: End
-
     starting_state = copy.deepcopy(State(stops=Stops,
                                          buses=Buses,
                                          bus_events=bus_arrival_events,
                                          time=bus_arrival_events[0].time))
 
-    mcts_discount_factor = config["mcts_discount_factor"]
     rollout_policy = BareMinimumRollout(rollout_horizon_delta_t=config["rollout_horizon_delta_t"],
                                         dispatch_policy=dispatch_policy)
+    
+    mcts_discount_factor = config["mcts_discount_factor"]
     lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
-    # lookahead_horizon_delta_t = None  # Runs until the end
     uct_tradeoff = config["uct_tradeoff"]
     pool_thread_count = config["pool_thread_count"]
     iter_limit = config["iter_limit"]
     allowed_computation_time = config["allowed_computation_time"]
     mcts_type = MCTSType.MODULAR_MCTS
     
+    heuristic_dispatch = HeuristicDispatch(travel_model)
     mdp_environment_model = DecisionEnvironmentDynamics(travel_model,
-                                                        send_nearest_dispatch=None,
+                                                        dispatch_policy=heuristic_dispatch,
                                                         logger=None,
                                                         config=config)
 
@@ -374,7 +360,8 @@ if __name__ == '__main__':
                                        allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
                                        starting_date=starting_date_str,
                                        oracle=config['oracle'],
-                                       base_dir=f'{BASE_DIR}/scenarios/baseline/',
+                                       base_dir=f'{BASE_DIR}/scenarios/testset/{starting_date_str}',
+                                       config=config,
                                        )
     elif config["method"] == 'baseline':
         decision_maker = GreedyCoordinator(travel_model=travel_model,
