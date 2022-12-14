@@ -64,10 +64,10 @@ class GreedyCoordinator:
                             if block_trip not in self.trips_already_covered:
                                 current_stop_number = self.travel_model.get_stop_number_at_id(block_trip, stop_id)
                                 stops_with_left_behind_passengers.append((stop_id,
-                                                                        current_stop_number,
-                                                                        arrival_time,
-                                                                        remaining_passengers,
-                                                                        block_trip))
+                                                                          current_stop_number,
+                                                                          arrival_time,
+                                                                          remaining_passengers,
+                                                                          block_trip))
 
             _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses,
                                 stops_with_left_behind_passengers]
