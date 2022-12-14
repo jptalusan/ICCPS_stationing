@@ -102,7 +102,7 @@ class GreedyCoordinator:
             return []
 
         # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
-        valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
+        valid_stops = ['MTA', 'MCC5_1', 'NOLTAYSN', 'DWMRT', 'WHICHASF']
 
         # Based on spatial clustering k = 10
         idle_overload_buses = []

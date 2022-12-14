@@ -74,7 +74,8 @@ class DecisionMaker:
                  allowed_computation_time,
                  starting_date,
                  oracle,
-                 base_dir):
+                 base_dir,
+                 config):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -92,12 +93,13 @@ class DecisionMaker:
         self.lookahead_horizon_delta_t = lookahead_horizon_delta_t
         self.oracle = oracle
         self.base_dir = base_dir
+        self.config = config
 
         self.starting_date = starting_date
         self.time_taken = {}
 
         self.action_type = None
-        self.logger = LogInit(pathName="logs/decision_maker.log", console=False, colors=False)
+        self.logger = LogInit(pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False)
 
     # Call the MCTS in parallel here
 
@@ -337,12 +339,12 @@ class DecisionMaker:
     def get_passenger_arrival_distributions(self, chain_count=1):
         # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
         # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TEST'
-        chain_dir = f'{self.base_dir}/chains/{self.starting_date}'
+        chain_dir = f'{self.base_dir}/chains'
 
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'{self.base_dir}/data/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(f'{self.base_dir}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains

@@ -36,6 +36,7 @@ class Simulator:
         self.config = config
         self.use_intervals = config["use_intervals"]
         self.use_timepoints = config["use_timepoints"]
+        self.reallocation = config["reallocation"]
         self.log_name = config["mcts_log_name"]
 
         # spd.FileLogger(name='visualizer', filename='visualizer.csv', truncate=True)
@@ -128,7 +129,7 @@ class Simulator:
         if bus_id and self.state.buses[bus_id].type == BusType.OVERLOAD:
             return
 
-        if update_event.event_type == EventType.DECISION_ALLOCATION_EVENT:
+        if (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and self.reallocation:
             chosen_action = self.event_processing_callback(_valid_actions,
                                                            self.state,
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
@@ -150,7 +151,7 @@ class Simulator:
     def decide_and_take_actions_1A(self, update_event, _valid_actions):
         if update_event and \
                 (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
-                self.use_intervals:
+                self.reallocation:
             chosen_action = self.event_processing_callback(_valid_actions,
                                                            self.state,
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
@@ -202,7 +203,7 @@ class Simulator:
     def decide_and_take_actions_1B(self, update_event, _valid_actions):
         if update_event and \
                 (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
-                self.use_intervals:
+                self.reallocation:
             chosen_action = self.event_processing_callback(_valid_actions,
                                                            self.state,
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)
@@ -256,7 +257,7 @@ class Simulator:
     def decide_and_take_actions_2A(self, update_event, _valid_actions):
         if update_event and \
                 (update_event.event_type == EventType.DECISION_ALLOCATION_EVENT) and \
-                self.use_intervals:
+                self.reallocation:
             chosen_action = self.event_processing_callback(_valid_actions,
                                                            self.state,
                                                            action_type=ActionType.OVERLOAD_ALLOCATE)

@@ -2,6 +2,10 @@ import smtplib
 from collections import deque
 import argparse
 import json
+import re
+import datetime as dt
+
+DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 def namespace_to_dict(namespace):
     return {
@@ -33,11 +37,20 @@ def send_email(config):
     result = tail(f'logs/no_inject_{config["mcts_log_name"]}.log', n=4)
     result = list(result)
     result = first_line + ("").join(result)
-        
-    message = 'Subject: {}\n\n{}'.format(SUBJECT, f"Testing done on digital-storm-1:\n{result}.")
+    in_brackets = re.findall("\[(.*?)\]", result)
 
+    start_time = dt.datetime.strptime(in_brackets[1], DATETIME_FORMAT)
+    end_time = dt.datetime.strptime(in_brackets[-1], DATETIME_FORMAT)
+    
+    elapsed = (end_time - start_time).total_seconds()
+    
+    result = result + "\n" + f"Total time: {elapsed} seconds"
+    
+    message = 'Subject: {}\n\n{}'.format(SUBJECT, f"Testing done on digital-storm-1:\n{result}.")
+    
     # sending the mail - passing 3 arguments i.e sender address, receiver address and the message
     smtpobj.sendmail(senderemail_id, receiveremail_id, message)
+    
     # Hereby terminate the session
     smtpobj.quit()
     print("mail send - Using simple text message")

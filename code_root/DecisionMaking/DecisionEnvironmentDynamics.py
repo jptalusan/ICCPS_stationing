@@ -128,8 +128,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         if num_available_buses <= 0:
             return []
 
-        # MTA, MCC5_1, HICHICNN, WESWILEN (based on MTA)
-        valid_stops = ['MTA', 'MCC5_1', 'HICHICNN', 'WESWILEN']
+        # Based on k-means clustering of disruption events and finding the center most stop from that cluster's envelope
+        valid_stops = ['MTA', 'MCC5_1', 'NOLTAYSN', 'DWMRT', 'WHICHASF']
 
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():

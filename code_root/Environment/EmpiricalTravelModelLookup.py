@@ -15,22 +15,22 @@ from Environment.enums import EventType, ActionType, BusType
 class EmpiricalTravelModelLookup:
     def __init__(self, base_dir, date_str, logger):
         # config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
-        config_path = f'{base_dir}/trip_plan_{date_str}.json'
+        config_path = f'{base_dir}/testset/{date_str}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
-        disruption_path = f'{base_dir}/disruption_probabilities.pkl'
+        disruption_path = f'{base_dir}/common/disruption_probabilities.pkl'
         self.sampled_disruption = pd.read_pickle(disruption_path)
 
         self.logger = logger
 
-        with open(f'{base_dir}/sampled_travel_times_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/common/sampled_travel_times_dict.pkl', 'rb') as handle:
             self.sampled_travel_time = pickle.load(handle)
 
-        with open(f'{base_dir}/stops_tt_dd_node_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/common/stops_tt_dd_node_dict.pkl', 'rb') as handle:
             self.stops_tt_dd_dict = pickle.load(handle)
 
-        with open(f'{base_dir}/stops_node_matching_dict.pkl', 'rb') as handle:
+        with open(f'{base_dir}/common/stops_node_matching_dict.pkl', 'rb') as handle:
             self.stop_nodes_dict = pickle.load(handle)
 
         # with open(f'{base_dir}/time_point_dict_{date_str}.pkl', 'rb') as handle:

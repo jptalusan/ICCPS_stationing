@@ -1,7 +1,6 @@
 import sys
 
 BASE_DIR = '../../../code_root'
-DATA_DIR = f'{BASE_DIR}/scenarios/baseline/data'
 sys.path.append(BASE_DIR)
 
 # All dates and times should just be datetime!
@@ -29,9 +28,6 @@ import numpy as np
 import pandas as pd
 import spdlog as spd
 import datetime as dt
-import smtplib
-import time
-from collections import deque
 
 
 def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
@@ -85,6 +81,7 @@ def load_initial_state(starting_date, bus_plan, trip_plan, random_seed=100):
 
 
 def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
+    datetime_str = dt.datetime.strptime(starting_date, '%Y%m%d')
     print("Adding events...")
     np.random.seed(random_seed)
     has_broken = False
@@ -97,7 +94,7 @@ def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file
     # Includes: Trip starts, passenger sampling
     # all active stops that buses will pass
     events = []
-    saved_events = f'scenarios/baseline/data/{event_file}'
+    saved_events = f'scenarios/testset/{datetime_str}/{event_file}'
 
     _starting_date_str = dt.datetime.strptime(starting_date, '%Y%m%d').strftime('%Y-%m-%d')
 
@@ -269,7 +266,8 @@ if __name__ == '__main__':
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config['starting_date_str']
-    config_path = f'{BASE_DIR}/scenarios/baseline/data/trip_plan_{starting_date_str}.json'
+    DATA_DIR = f'{BASE_DIR}/scenarios/testset/{starting_date_str}'
+    config_path = f'{BASE_DIR}/scenarios/testset/{starting_date_str}/trip_plan_{starting_date_str}.json'
     with open(config_path) as f:
         trip_plan = json.load(f)
 
@@ -282,8 +280,9 @@ if __name__ == '__main__':
 
     with open(config_path) as f:
         bus_plan = json.load(f)
-
-    travel_model = EmpiricalTravelModelLookup(DATA_DIR, starting_date_str, logger=None)
+        
+    LOOKUP_DIR = f'{BASE_DIR}/scenarios'
+    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, logger=None)
     dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
@@ -301,8 +300,8 @@ if __name__ == '__main__':
     # Injecting incident
     # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
     #                                                 buses=Buses,
-    #                                                 bus_id='706',
-    #                                                 time=str_timestamp_to_datetime('2021-03-05 10:24:24'))
+    #                                                 bus_id='1830',
+    #                                                 time=str_timestamp_to_datetime('2021-12-15 09:45:00'))
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system
@@ -312,8 +311,9 @@ if __name__ == '__main__':
     # Adding interval events
     if config["use_intervals"]:
         before_count = len(bus_arrival_events)
-        bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan,
-                                                               intervals=15)
+        if config["reallocation"]:
+            bus_arrival_events = manually_insert_allocation_events(bus_arrival_events, starting_date, Buses, trip_plan,
+                                                                intervals=15)
         if config["scenario"] == "2A":
             bus_arrival_events = manually_insert_dispatch_events(bus_arrival_events, starting_date, Buses, trip_plan,
                                                                  intervals=15)
@@ -360,7 +360,8 @@ if __name__ == '__main__':
                                        allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
                                        starting_date=starting_date_str,
                                        oracle=config['oracle'],
-                                       base_dir=f'{BASE_DIR}/scenarios/baseline/',
+                                       base_dir=f'{BASE_DIR}/scenarios/testset/{starting_date_str}',
+                                       config=config,
                                        )
     elif config["method"] == 'baseline':
         decision_maker = GreedyCoordinator(travel_model=travel_model,

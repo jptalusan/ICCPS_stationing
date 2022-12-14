@@ -218,10 +218,12 @@ class EnvironmentModelFast:
             passenger_waiting = state.stops[stop_id].passenger_waiting
             for route_id_dir, v in passenger_waiting.items():
                 if passenger_arrival_time in passenger_waiting[route_id_dir]:
+                    # remaining = state.trips_with_px_left[k]
+                    remaining = passenger_waiting[route_id_dir][passenger_arrival_time]['remaining']
                     passenger_waiting[route_id_dir][passenger_arrival_time]['remaining'] = 0
-                    remaining = state.trips_with_px_left[k]
-                    state.stops[stop_id].total_passenger_walk_away += remaining
-                    log(self.logger, state.time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
+                    if remaining > 0:
+                        state.stops[stop_id].total_passenger_walk_away += remaining
+                        log(self.logger, state.time, f"{remaining} people left stop {stop_id},{current_stop_number},{current_block_trip}", LogType.ERROR)
             del state.trips_with_px_left[k]
 
     # TODO: Bug when overwriting trips with the same route_id_name
@@ -340,7 +342,7 @@ class EnvironmentModelFast:
                                                  'ons': ons, 'offs': offs}}
                     if remaining > 0:
                         log(self.logger,
-                            _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}",
+                            _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id},{current_stop_number},{current_block_trip}",
                             LogType.ERROR)
                         
                         full_state.trips_with_px_left[(current_block_trip, passenger_arrival_time, stop_id, current_stop_number)] = remaining
@@ -392,7 +394,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                     got_on_bus = 0
                     if remaining > 0:
                         log(self.logger,
-                            _new_time, f"{remaining} people left stop {stop_id}", LogType.ERROR)
+                            _new_time, f"{remaining} people left stop {stop_id},{current_stop_number},{current_block_trip}", LogType.ERROR)
                         
                         # Delete trips where passengers left.
                         key = [k for k, v in full_state.trips_with_px_left.items() if k[1] == passenger_arrival_time and k[2] == stop_id]
@@ -407,7 +409,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                                                  'ons': ons, 'offs': offs}}
                     if remaining > 0:
                         log(self.logger,
-                            _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id}",
+                            _new_time, f"Bus {bus_id} left {remaining} people at stop {stop_id},{current_stop_number},{current_block_trip}",
                             LogType.ERROR)
 
         log_str = f"""Bus {bus_id} on trip: {current_block_trip[1]} scheduled for {scheduled_arrival_time} \
