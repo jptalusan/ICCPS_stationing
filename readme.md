@@ -18,16 +18,20 @@
     * US Holiday Dates (2004-2021).csv
 
 ## Generate models
-1. Generate required files using:
-    * `data_generation/step0_generator.ipynb`: You will need to run `pair_tt_dd.py` and `generate_day_trips.py` as part of this.
-    * This also generates the config files which will add files to `results/test_data`. Run this part last.
-2. Run `data_generation/generate_day_trips.py`: This will generate the following files that will be used for simulations:
-    * `data_generation/results/test_data/YYMMDD/chains/ons_offs_dict_chain_YYMMDD_X.pkl`: used for stochasticity
-    * `data_generation/results/test_data/YYMMDD/sampled_ons_offs_dict_20211001.pkl`: used as the "real world" passenger model, but based on generative model as well.
-    * `data_generation/results/test_data/YYMMDD/trip_plan_20211001.json`: trip schedules for the day YYMMDD
-    * `data_generation/results/test_data/YYMMDD/vehicle_plan_20211001.json`: vehicle trip assignments and capacities for the day YYMMDD
-3. Generate depots:
-    * `data_generation/stops_clustering.ipynb`
+1. Run `data_generation/run_all.py` to generate all required common files.
+    * `pair_dd_tt`
+    * `travel_time_by_scheduled_time`
+    * `sampled_travel_times_dict`
+    * `davidson_graph.graphml`
+    * `pair_tt_dd_stops`
+    * `stops_tt_dd_node_dict`
+    * `stops_tt_dd_dict`
+    * `stops_node_matching_dict`
+2. Run `data_generation/generate_day_trips.py` to generate trip and vehicle plans as well as chains.
+3. Run `data_generation/step0_generator` to generate:
+    * `disruption_probabilities`
+    * Config and Execute bash scripts for testing.
+4. Run `stops_clustering` to generate possible stationing locations.
 
 ## Usage
 1. Create a copy of the `TEST` folder in `code_root/experiments` and rename.

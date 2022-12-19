@@ -1,7 +1,7 @@
 from tensorflow.keras import backend as K
 K.clear_session()
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 import datetime as dt
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -17,7 +17,9 @@ from tensorflow.keras.layers import Dense, LSTM, Dropout
 from copy import deepcopy
 from tqdm import tqdm
 from pathlib import Path
+import smtplib
 import shutil
+import time
 mpl.rcParams['figure.facecolor'] = 'white'
 
 import warnings
@@ -40,9 +42,13 @@ spark = SparkSession.builder.config('spark.executor.cores', '8').config('spark.e
         .config("spark.shuffle.spill", "true")\
         .getOrCreate()
         
+# physical_devices = tf.config.experimental.list_physical_devices('GPU')
+# assert len(physical_devices) > 0, "Not enough GPU hardware devices available"
+# config = tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        
 def get_apc_data_for_daterange(start_date, end_date):
     print("Running this...")
-    filepath = '/home/jptalusan/mta_stationing_problem/data/processed/apc_weather_gtfs_20220921.parquet'
+    filepath = '/home/jptalusan/mta_stationing_problem/data/processed/apc_weather_gtfs_20221216.parquet'
     apcdata = spark.read.load(filepath)
     apcdata.createOrReplaceTempView("apc")
 
@@ -73,11 +79,10 @@ def get_apc_data_for_daterange(start_date, end_date):
 
 def get_apc_data_for_date(filter_date):
     print("Running this...")
-    filepath = '/home/jptalusan/mta_stationing_problem/data/processed/apc_weather_gtfs_20220921.parquet'
+    filepath = '/home/jptalusan/mta_stationing_problem/data/processed/apc_weather_gtfs_20221216.parquet'
     apcdata = spark.read.load(filepath)
     apcdata.createOrReplaceTempView("apc")
 
-    plot_date = filter_date.strftime('%Y-%m-%d')
     get_columns = ['trip_id', 'transit_date', 'arrival_time', 'scheduled_time',
                 'block_abbr', 'stop_sequence', 'stop_id_original',
                 'vehicle_id', 'vehicle_capacity',
@@ -92,7 +97,7 @@ def get_apc_data_for_date(filter_date):
     query = f"""
         SELECT {get_str}
         FROM apc
-        WHERE (transit_date == '{plot_date}')
+        WHERE (transit_date == '{filter_date}')
         ORDER BY arrival_time
     """
     apcdata = spark.sql(query)
@@ -260,6 +265,23 @@ def merge_overload_regular_bus_trips(regular, overload):
     m = m[m.columns.drop(list(m.filter(regex='_y')))]
     return m
 
+def send_email(subject, message):
+    smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
+    # start TLS for security which makes the connection more secure
+    smtpobj.starttls()
+    senderemail_id = "jptalusan@gmail.com"
+    senderemail_id_password = "bhgbzkzzwgrhnpji"
+    receiveremail_id = "jptalusan@gmail.com"
+    # Authentication for signing to gmail account
+    smtpobj.login(senderemail_id, senderemail_id_password)
+    # message to be sent
+    SUBJECT = subject
+    message = 'Subject: {}\n\n{}'.format(SUBJECT, f"{message}.")
+    smtpobj.sendmail(senderemail_id, receiveremail_id, message)
+    # Hereby terminate the session
+    smtpobj.quit()
+    print("mail send - Using simple text message")
+    
 # Load model
 latest = tf.train.latest_checkpoint('models/no_speed')
 columns = joblib.load('models/LL_X_columns.joblib')
@@ -274,12 +296,12 @@ FUTURE = None
 PAST = 5
 NUM_TRIPS = None
 
-def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
+def generate_traffic_data_for_date(df, DATE, config, GTFS_MONTH, CHAINS):
     date_to_predict = dt.datetime.strptime(DATE, '%Y-%m-%d')
     df = df.query("overload_id == 0")
     df = df.dropna(subset=['arrival_time'])
 
-    # HACK
+    # # HACK
     df = df.query("route_id != 95")
     df = df.query("route_id != 89")
     df = df.query("route_id != 88")
@@ -292,7 +314,8 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
     # df.loc[df['time_window'].isin([6, 7, 8]), 'time_window'] = 16
 
     input_df = prepare_input_data(df, ohe_encoder, label_encoders, num_scaler, columns, target='y_class')
-    input_df = input_df.drop(columns=ohe_columns)
+    drop_cols = [ohe_column for ohe_column in ohe_columns if ohe_column in input_df.columns]
+    input_df = input_df.drop(columns=drop_cols)
 
     if NUM_TRIPS == None:
         rand_trips = df.trip_id.unique().tolist()
@@ -336,31 +359,36 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
     fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
     trip_res_df.to_pickle(fp)
 
-    DEFAULT_CAPACITY = 10.0
+    DEFAULT_CAPACITY = config["capacities_of_regular_buses"]
 
     overall_vehicle_plan = {}
-    # start_time = '08:00:00'
-    # end_time = '12:00:00'
     fp = f'results/sampled_loads_{DATE.replace("-","")}.pkl'
     trip_res_df = pd.read_pickle(fp)
 
-    # start_datetime = dt.datetime.strptime(f"{DATE} {start_time}", "%Y-%m-%d %H:%M:%S")
-    # end_datetime = dt.datetime.strptime(f"{DATE} {end_time}", "%Y-%m-%d %H:%M:%S")
+    ##### FOR LIMITING TIME
+    
+    if config["limit_service_hours"]:
+        start_time = config["limit_service_hours_start_time"]
+        end_time = config["limit_service_hours_end_time"]
+        start_datetime = dt.datetime.strptime(f"{DATE} {start_time}", "%Y-%m-%d %H:%M:%S")
+        end_datetime = dt.datetime.strptime(f"{DATE} {end_time}", "%Y-%m-%d %H:%M:%S")
 
-    # arr = []
-    # for trip_id, trip_df in trip_res_df.groupby('trip_id'):
-    #     if (trip_df.scheduled_time.min() >= start_datetime) and (trip_df.scheduled_time.max() <= end_datetime):
-    #         arr.append(trip_df)
+        arr = []
+        for trip_id, trip_df in trip_res_df.groupby('trip_id'):
+            if (trip_df.scheduled_time.min() >= start_datetime) and (trip_df.scheduled_time.max() <= end_datetime):
+                arr.append(trip_df)
 
-    # trip_res_df = pd.concat(arr)
+        trip_res_df = pd.concat(arr)
 
-    # TODO: run again with vehicle_capacity (above)
     for vehicle_id, vehicle_df in trip_res_df.groupby('vehicle_id'):
         vehicle_df = vehicle_df.dropna(subset=['arrival_time']).sort_values(['scheduled_time'])
-        # vehicle_capacity = vehicle_df.iloc[0].vehicle_capacity
-        vehicle_capacity = DEFAULT_CAPACITY
-        # if np.isnan(vehicle_capacity):
-        #     vehicle_capacity = DEFAULT_CAPACITY
+        if config["limit_regular_bus_capacity"]:
+            vehicle_capacity = DEFAULT_CAPACITY
+        else:
+            vehicle_capacity = vehicle_df.iloc[0].vehicle_capacity
+            if np.isnan(vehicle_capacity):
+                vehicle_capacity = DEFAULT_CAPACITY
+                
         # TODO: This is not the baseline behavior
         starting_depot = 'MCC5_1'
         service_type = 'regular'
@@ -458,6 +486,7 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
             with open(f'results/chains/{DATE.replace("-","")}/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.pkl', 'wb') as handle:
                 pickle.dump(sampled_ons_offs_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
+    ### FOR TIMEPOINT
     # stop_times_fp = f'data/GTFS/{GTFS_MONTH}/stop_times.txt'
     # stop_times_df = pd.read_csv(stop_times_fp)
     # stop_times_df['date'] = DATE
@@ -475,39 +504,47 @@ def generate_traffic_data_for_date(df, DATE, GTFS_MONTH, CHAINS):
     #     pickle.dump(time_point_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
+    start_time = time.time()
+    
     config = {
         "number_of_overload_buses": 5,
         "capacities_of_overload_buses": 55,
+        "limit_regular_bus_capacity": True,
+        "capacities_of_regular_buses": 10,
         "is_date_range": True,
-        "date": "2021-10-24",
-        "start_date": "2021-10-24",
-        "end_date": "2021-10-31",
+        "date": "2022-10-24",
+        "start_date": "2022-10-01",
+        "end_date": "2022-10-31",
         "frequency_h": 24,
-        "GTFS_month": "OCT2021",
-        "chains": 21
+        "GTFS_month": "OCT2022",
+        "chains": 21,
+        "set_name": "_2022",
+        "limit_service_hours": False,
+        "limit_service_hours_start_time": "08:00:00",
+        "limit_service_hours_end_time": "12:00:00"
     }
-    
+
     GTFS_MONTH = config["GTFS_month"]
     CHAINS = config["chains"]
 
-    dates = pd.date_range(config["start_date"], config["end_date"], freq=f'{config["frequency_h"]}h')
-    dates = [dr.strftime('%Y-%m-%d') for dr in dates]
-    
+
     if config["is_date_range"]:
+        dates = pd.date_range(config["start_date"], config["end_date"], freq=f'{config["frequency_h"]}h')
+        dates = [dr.strftime('%Y-%m-%d') for dr in dates]
         apcdata = get_apc_data_for_daterange(config["start_date"], config["end_date"])
+        df = apcdata.toPandas()
+        for date in tqdm(dates):
+            a = df.query("transit_date == @date")
+            generate_traffic_data_for_date(a, date, config, GTFS_MONTH, CHAINS)
     else:
         apcdata = get_apc_data_for_date(config["date"])
-        
-    df = apcdata.toPandas()
-    
-    for date in tqdm(dates):
-        a = df.query("transit_date == @date")
-        generate_traffic_data_for_date(a, date, GTFS_MONTH, CHAINS)
+        df = apcdata.toPandas()
+        generate_traffic_data_for_date(df, config["date"], config, GTFS_MONTH, CHAINS)
+        dates = [config["date"]]
 
     # Reorganize files after generation
     chains_dir = 'results/chains/'
     results_dir = 'results/test_data'
-
     for date in dates:
         date_str = date.replace('-','')
         date_dir = f"{results_dir}/{date_str}"
@@ -519,4 +556,6 @@ if __name__ == '__main__':
         os.rename(f"results/trip_plan_{date_str}.json", f"{date_dir}/trip_plan_{date_str}.json")
         os.rename(f"results/vehicle_plan_{date_str}_10CAP.json", f"{date_dir}/vehicle_plan_{date_str}_10CAP.json")
         os.rename(f"{chains_dir}/{date_str}", f"{date_dir}/chains")
-        
+
+    elapsed = time.time() - start_time
+    send_email("GENERATE_DAY_TRIPS", f"Done in: {elapsed} seconds.")
