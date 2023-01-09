@@ -360,3 +360,5 @@ code_root/experiments/*
 
 *.tar.gz
 data_generation/test.ipynb
+*.out
+data_generation/test.ipynb
