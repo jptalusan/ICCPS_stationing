@@ -184,7 +184,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
                 travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                             ofb_obj.current_stop,
-                                                                                            stop_no)
+                                                                                            stop_no,
+                                                                                            state.time)
                 ofb_obj.total_deadkms_moved += distance
                 log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 
@@ -253,7 +254,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
             travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
                                                                                         ofb_obj.current_stop,
-                                                                                        ofb_obj.current_stop_number)
+                                                                                        ofb_obj.current_stop_number,
+                                                                                        state.time)
             ofb_obj.total_deadkms_moved += distance
             log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 

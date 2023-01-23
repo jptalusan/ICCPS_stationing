@@ -103,7 +103,8 @@ class EnvironmentModelFast:
 
                         travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                                      current_depot,
-                                                                                                     current_stop_number)
+                                                                                                     current_stop_number,
+                                                                                                     state.time)
                         if BusType.OVERLOAD == bus_type:
                             state.buses[bus_id].total_deadkms_moved += distance
                             log(self.logger, state.time, f"Bus {bus_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
@@ -128,11 +129,10 @@ class EnvironmentModelFast:
                     state.buses[bus_id].current_stop_number = current_stop_number + 1
                     travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                                  current_stop_id,
-                                                                                                 state.buses[
-                                                                                                     bus_id].current_stop_number)
+                                                                                                 state.buses[bus_id].current_stop_number,
+                                                                                                 state.time)
                     scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip,
-                                                                                          state.buses[
-                                                                                              bus_id].current_stop_number)
+                                                                                          state.buses[bus_id].current_stop_number)
                     time_to_state_change = time_of_arrival + dt.timedelta(seconds=travel_time)
 
                     # Taking into account delay time
@@ -448,7 +448,8 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
                 travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                             ofb_obj.current_stop,
-                                                                                            stop_no)
+                                                                                            stop_no,
+                                                                                            state.time)
                 ofb_obj.total_deadkms_moved += distance
                 log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 
@@ -516,7 +517,8 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
             travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(ofb_obj.current_block_trip,
                                                                                          ofb_obj.current_stop,
-                                                                                         ofb_obj.current_stop_number)
+                                                                                         ofb_obj.current_stop_number,
+                                                                                         state.time)
             ofb_obj.total_deadkms_moved += distance
             log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 

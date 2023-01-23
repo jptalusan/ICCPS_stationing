@@ -3,6 +3,7 @@ import json
 import warnings
 import pickle
 import pandas as pd
+import numpy as np
 import datetime as dt
 # from pandas.core.common import SettingWithCopyWarning
 from Environment.enums import EventType, ActionType, BusType
@@ -10,10 +11,9 @@ from Environment.enums import EventType, ActionType, BusType
 # warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 # warnings.simplefilter(action='ignore', category=FutureWarning)
 
-
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
-    def __init__(self, base_dir, date_str, logger):
+    def __init__(self, base_dir, date_str, config, logger):
         # config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
         config_path = f'{base_dir}/testset/{date_str}/trip_plan_{date_str}.json'
         with open(config_path) as f:
@@ -33,8 +33,15 @@ class EmpiricalTravelModelLookup:
         with open(f'{base_dir}/common/stops_node_matching_dict.pkl', 'rb') as handle:
             self.stop_nodes_dict = pickle.load(handle)
 
-        # with open(f'{base_dir}/time_point_dict_{date_str}.pkl', 'rb') as handle:
-        #     self.time_point_dict = pickle.load(handle)
+        # For incident factor
+        with open(f'{base_dir}/common/processed_grid_probabilities_dict.pkl', 'rb') as handle:
+            self.grid_probabilities_dict = pickle.load(handle)
+        with open(f'{base_dir}/common/processed_stop_to_grid_dict.pkl', 'rb') as handle:
+            self.stop_to_grid_dict = pickle.load(handle)
+        with open(f'{base_dir}/common/processed_tt_incident_factor_per_stop_pair_dict.pkl', 'rb') as handle:
+            self.tt_incident_factor_dict = pickle.load(handle)
+            
+        self.config = config
 
     # pandas dataframe: route_id_direction, block_abbr, stop_id_original, time, IsWeekend, sample_time_to_next_stop
     def get_travel_time(self, current_block_trip, current_stop_number, _datetime):
@@ -66,17 +73,17 @@ class EmpiricalTravelModelLookup:
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
 
-        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop, _datetime)
         return tt
 
     # tt is in seconds
     def get_travel_time_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        tt, _ = self.get_traveltime_distance_from_stops(current_stop, next_stop, _datetime)
         return tt
 
     # dd is in meters
     def get_distance_from_stop_to_stop(self, current_stop, next_stop, _datetime):
-        _, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        _, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop, _datetime)
         return dd
 
     # Can probably move to a different file next time
@@ -137,20 +144,25 @@ class EmpiricalTravelModelLookup:
         trip_data = self.trip_plan[current_trip]
         return trip_data['last_stop_sequence']
 
-    def get_traveltime_distance_from_depot(self, current_block_trip, current_stop, current_stop_number):
+    def get_traveltime_distance_from_depot(self, current_block_trip, current_stop, current_stop_number, _datetime):
         dd = -1
         tt = -1
         current_trip = current_block_trip[1]
         trip_data = self.trip_plan[current_trip]
         next_stop = trip_data['stop_id_original'][current_stop_number]
 
-        tt, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop)
+        tt, dd = self.get_traveltime_distance_from_stops(current_stop, next_stop, _datetime)
         return tt, dd
 
-    def get_traveltime_distance_from_stops(self, current_stop, next_stop):
+    def get_traveltime_distance_from_stops(self, current_stop, next_stop, _datetime):
         cn = self.stop_nodes_dict[current_stop]['nearest_node']
         nn = self.stop_nodes_dict[next_stop]['nearest_node']
 
+        if self.config.get("incident_factor", False):
+            tt_factor = self.get_travel_time_incident_factor(current_stop, next_stop, _datetime)
+        else:
+            tt_factor = 1.0
+        
         if (cn, nn) in self.stops_tt_dd_dict:
             tt = self.stops_tt_dd_dict[(cn, nn)]['travel_time_s']
             dd = self.stops_tt_dd_dict[(cn, nn)]['distance_m']
@@ -159,14 +171,39 @@ class EmpiricalTravelModelLookup:
             dd = self.stops_tt_dd_dict[(nn, cn)]['distance_m']
         else:
             # print(f"Could not find tt/dd for {cn}/{current_stop} to {nn}/{next_stop}.")
-            return 60, 0.5
+            return 60 * tt_factor, 0.5
             # raise "Error"
         if tt < 0:
             # print(f"Could not find tt/dd for {cn}/{current_stop} to {nn}/{next_stop}.")
-            return 60, 0.5
+            return 60 * tt_factor, 0.5
             # raise "Error"
-        return tt, dd / 1000
+        return tt * tt_factor, dd / 1000
 
+    def get_travel_time_incident_factor(self, current_stop, next_stop, _datetime):
+        grid = self.stop_to_grid_dict[current_stop]
+        stop_pair = f"{current_stop}_{next_stop}"
+        tod = get_tod(_datetime)
+        a = self.grid_probabilities_dict.get((grid, tod), None)
+        if a:
+            probability = a['probability']
+        else:
+            probability = 0
+            
+        incident_chance = np.random.choice([0, 1], size=1, p=[1-probability, probability])
+
+        if incident_chance > 0:
+            a = self.tt_incident_factor_dict.get(stop_pair)
+            if a:
+                i_factor = a['tt_incident_factor']
+                if not np.isnan(i_factor):
+                    if i_factor < 1.0:
+                        i_factor = 1.0
+                    # print("get_travel_time_incident_factor:", current_stop, next_stop, _datetime, i_factor)
+                    return i_factor
+                else:
+                    return 1.0
+        return 1.0
+                
     def get_last_arrival_event(self, state):
         trips = []
         for bus_id, bus_obj in state.buses.items():
