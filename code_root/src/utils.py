@@ -66,3 +66,20 @@ def log(logger, curr_time=None, message=None, type=LogType.DEBUG):
             logger.info(f"[{datetime_to_str(curr_time)}] {message}")
         else:
             logger.debug(f"{message}")
+
+def get_tod(timestamp):
+    h = timestamp.hour
+    if h < 6:
+        return 'early_am'
+    elif h >= 6 and h < 9:
+        return 'rush_am'
+    elif h >= 9 and h < 13:
+        return 'mid_am'
+    elif h >= 13 and h < 17:
+        return 'mid_pm'
+    elif h >= 17 and h < 19:
+        return 'rush_pm'
+    elif h >= 20 and h < 24:
+        return 'night'
+    else:
+        return None

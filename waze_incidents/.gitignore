@@ -2,6 +2,7 @@
 *
 get_tt_factor.py
 # Except this file
+!readme.md
 !.gitignore
 !*.ipynb
 !merging.py

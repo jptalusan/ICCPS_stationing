@@ -121,7 +121,8 @@ def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file
 
             travel_time, distance = travel_model.get_traveltime_distance_from_depot(current_block_trip,
                                                                                     current_depot,
-                                                                                    bus.current_stop_number)
+                                                                                    bus.current_stop_number,
+                                                                                    first_stop_scheduled_time)
 
             time_to_state_change = first_stop_scheduled_time + dt.timedelta(seconds=travel_time)
             bus.t_state_change = time_to_state_change
@@ -282,7 +283,7 @@ if __name__ == '__main__':
         bus_plan = json.load(f)
         
     LOOKUP_DIR = f'{BASE_DIR}/scenarios'
-    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, logger=None)
+    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, config=config, logger=None)
     dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
@@ -294,12 +295,15 @@ if __name__ == '__main__':
 
     bus_arrival_events = load_events(travel_model, starting_date_str, Buses, Stops, trip_plan)
 
-    # HACK: Start
     # Injecting incident
-    # bus_arrival_events = manually_insert_disruption(bus_arrival_events,
-    #                                                 buses=Buses,
-    #                                                 bus_id='1830',
-    #                                                 time=str_timestamp_to_datetime('2021-12-15 09:45:00'))
+    breakdowns = config.get("breakdowns", None)
+    if breakdowns:
+        for bus_id, breakdown_datetime_str in breakdowns.items():
+            bus_arrival_events = manually_insert_disruption(bus_arrival_events,
+                                                            buses=Buses,
+                                                            bus_id=bus_id,
+                                                            time=str_timestamp_to_datetime(breakdown_datetime_str))
+            
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system

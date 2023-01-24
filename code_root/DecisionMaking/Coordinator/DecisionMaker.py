@@ -352,7 +352,7 @@ class DecisionMaker:
             start_time = time.time()
 
             for chain in range(chain_count):
-                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain}.pkl'
+                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain+10}.pkl'
                 with open(fp, 'rb') as handle:
                     sampled_ons_offs_dict = pickle.load(handle)
                     passenger_arrival_chains.append(sampled_ons_offs_dict)
