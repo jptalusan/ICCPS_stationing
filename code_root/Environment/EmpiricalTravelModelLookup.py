@@ -180,7 +180,10 @@ class EmpiricalTravelModelLookup:
         return tt * tt_factor, dd / 1000
 
     def get_travel_time_incident_factor(self, current_stop, next_stop, _datetime):
-        grid = self.stop_to_grid_dict[current_stop]
+        grid = self.stop_to_grid_dict.get(current_stop, None)
+        if grid is None:
+            return 1.0
+        
         stop_pair = f"{current_stop}_{next_stop}"
         tod = get_tod(_datetime)
         a = self.grid_probabilities_dict.get((grid, tod), None)
