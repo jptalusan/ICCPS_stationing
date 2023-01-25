@@ -243,7 +243,7 @@ class EnvironmentModelFast:
         key = (route_id_dir, block_abbr, current_stop_number + 1, current_stop_id, scheduled_arrival_time)
         val = passenger_arrival_distribution[key]
 
-        curr_stop_loads = val['sampled_loads']
+        # curr_stop_loads = val['sampled_loads']
         curr_stop_ons = val['ons']
         curr_stop_offs = val['offs']
 

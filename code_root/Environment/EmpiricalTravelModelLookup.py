@@ -15,7 +15,7 @@ from Environment.enums import EventType, ActionType, BusType
 class EmpiricalTravelModelLookup:
     def __init__(self, base_dir, date_str, config, logger):
         # config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
-        config_path = f'{base_dir}/testset/{date_str}/trip_plan_{date_str}.json'
+        config_path = f'{base_dir}/{config["real_world_dir"]}/{date_str}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
@@ -191,7 +191,8 @@ class EmpiricalTravelModelLookup:
             probability = a['probability']
         else:
             probability = 0
-            
+        
+        np.random.seed(100)
         incident_chance = np.random.choice([0, 1], size=1, p=[1-probability, probability])
 
         if incident_chance > 0:

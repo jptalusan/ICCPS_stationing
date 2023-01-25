@@ -337,14 +337,19 @@ class DecisionMaker:
         return [_events]
 
     def get_passenger_arrival_distributions(self, chain_count=1):
-        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TRAIN'
-        # chain_dir = f'{self.base_dir}/chains/{self.starting_date}_TEST'
-        chain_dir = f'{self.base_dir}/chains'
+        chain_dir = f'{self.base_dir}/{self.config["chains_dir"]}'
+        environment_dir = f'{self.base_dir}/{self.config["real_world_dir"]}'
 
+        # HACK: Fix the files instead of this.
+        if self.config["chains_dir"] == "MODEL_CHAINS":
+            idx = 10
+        else:
+            idx = 0
+            
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'{self.base_dir}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(f'{environment_dir}/{self.starting_date}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains
@@ -352,7 +357,7 @@ class DecisionMaker:
             start_time = time.time()
 
             for chain in range(chain_count):
-                fp = f'{chain_dir}/ons_offs_dict_chain_{self.starting_date}_{chain+10}.pkl'
+                fp = f'{chain_dir}/{self.starting_date}/ons_offs_dict_chain_{self.starting_date}_{chain+idx}.pkl'
                 with open(fp, 'rb') as handle:
                     sampled_ons_offs_dict = pickle.load(handle)
                     passenger_arrival_chains.append(sampled_ons_offs_dict)

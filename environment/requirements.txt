@@ -1,6 +1,6 @@
-pyspark
-numpy
-pandas
+pyspark==3.3.1
+numpy==1.23.5
+pandas==1.5.2
 fastlogging
 pybind11
 spdlog

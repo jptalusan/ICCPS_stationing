@@ -87,7 +87,7 @@ def load_events(travel_model, starting_date, Buses, Stops, trip_plan, event_file
     has_broken = False
     is_weekend = 0 if dt.datetime.strptime(starting_date, '%Y%m%d').weekday() < 5 else 1
     # Load distributions
-    with open(f'{DATA_DIR}/sampled_ons_offs_dict_{starting_date}.pkl', 'rb') as handle:
+    with open(f'{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date}.pkl', 'rb') as handle:
         sampled_travel_time = pickle.load(handle)
 
     # Initial events
@@ -267,17 +267,18 @@ if __name__ == '__main__':
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config['starting_date_str']
-    DATA_DIR = f'{BASE_DIR}/scenarios/testset/{starting_date_str}'
-    config_path = f'{BASE_DIR}/scenarios/testset/{starting_date_str}/trip_plan_{starting_date_str}.json'
+    REALWORLD_DIR =  f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}'
+    config_path = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}/trip_plan_{starting_date_str}.json'
+    
     with open(config_path) as f:
         trip_plan = json.load(f)
 
     log(logger, dt.datetime.now(), json.dumps(config), LogType.INFO)
 
     if vehicle_count != "":
-        config_path = f'{DATA_DIR}/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
+        config_path = f'{REALWORLD_DIR}/vehicle_plan_{starting_date_str}_{vehicle_count}.json'
     else:
-        config_path = f'{DATA_DIR}/vehicle_plan_{starting_date_str}.json'
+        config_path = f'{REALWORLD_DIR}/vehicle_plan_{starting_date_str}.json'
 
     with open(config_path) as f:
         bus_plan = json.load(f)
@@ -307,7 +308,7 @@ if __name__ == '__main__':
     bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
 
     # Removing arrive events and changing it to a datastruct to pass to the system
-    with open(f'{DATA_DIR}/sampled_ons_offs_dict_{starting_date_str}.pkl', 'rb') as handle:
+    with open(f'{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}.pkl', 'rb') as handle:
         passenger_arrival_distribution = pickle.load(handle)
 
     # Adding interval events
@@ -362,7 +363,7 @@ if __name__ == '__main__':
                                        allowed_computation_time=allowed_computation_time,  # 5 seconds per thread
                                        starting_date=starting_date_str,
                                        oracle=config['oracle'],
-                                       base_dir=f'{BASE_DIR}/scenarios/testset/{starting_date_str}',
+                                       base_dir=f'{BASE_DIR}/scenarios',
                                        config=config,
                                        )
     elif config["method"] == 'baseline':
