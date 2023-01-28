@@ -113,7 +113,7 @@ class DecisionMaker:
     def event_processing_callback_funct(self, actions, state, action_type):
         # Only do something when buses are available?
         
-        if len(self.get_trips_with_remaining_passengers(state)) <= 0:
+        if len(self.get_trips_with_remaining_passengers(state)) <= 0 and action_type == ActionType.OVERLOAD_DISPATCH:
             print(f"Event counter: {self.event_counter}")
             print(f"Event: {state.bus_events[0]}")
             print(f"Time: {state.time}")
