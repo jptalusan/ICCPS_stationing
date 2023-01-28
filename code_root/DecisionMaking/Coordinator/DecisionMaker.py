@@ -102,10 +102,25 @@ class DecisionMaker:
         self.logger = LogInit(pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False)
 
     # Call the MCTS in parallel here
+    def get_trips_with_remaining_passengers(self, state, limit=None):
+        trips_with_remaining = sorted(state.trips_with_px_left, key=state.trips_with_px_left.get, reverse=True)
+        if limit:
+            trips_with_remaining = trips_with_remaining[0:limit-1]
+        trips_with_remaining = [i for i in trips_with_remaining if i]
+        return trips_with_remaining
 
     # Check if current stop and scheduled times are timepoints, only do decisions then.
     def event_processing_callback_funct(self, actions, state, action_type):
         # Only do something when buses are available?
+        
+        if len(self.get_trips_with_remaining_passengers(state)) <= 0:
+            print(f"Event counter: {self.event_counter}")
+            print(f"Event: {state.bus_events[0]}")
+            print(f"Time: {state.time}")
+            print("no incidents detected")
+            print()
+            return None
+        
         if self.any_available_overload_buses(state):
             self.action_type = action_type
             self.event_counter += 1
