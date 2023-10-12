@@ -679,7 +679,7 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
             tdf[["ons", "offs"]] = tdf.apply(compute_ons_offs, axis=1, result_type="expand")
 
             # first and last stops
-            tdf.at[0, "ons"] = tdf.iloc[0]["sampled_loads"]
+            tdf.at[0, "ons"] = tdf.iloc[0]["next_load"]
             tdf.at[len(tdf) - 1, "offs"] = tdf.iloc[-1]["sampled_loads"]
             sampled_ons_offs.append(tdf)
 
@@ -711,22 +711,6 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
 
 
 def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
-    # _columns = [
-    #     "trip_id",
-    #     "transit_date",
-    #     "arrival_time",
-    #     "scheduled_time",
-    #     "block_abbr",
-    #     "stop_sequence",
-    #     "stop_id_original",
-    #     "route_id_dir",
-    #     "zero_load_at_trip_end",
-    #     "load",
-    #     "vehicle_id",
-    #     "vehicle_capacity",
-    # ]
-    # trip_res_df = trip_res[_columns]
-
     save_plans(trip_res_df=trip_res_df, config=config, DATE=DATE)
     noise_levels = config["noise_pct"]
 
@@ -763,7 +747,7 @@ def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
                 tdf[["ons", "offs"]] = tdf.apply(compute_ons_offs, axis=1, result_type="expand")
 
                 # first and last stops
-                tdf.at[0, "ons"] = tdf.iloc[0]["sampled_loads"]
+                tdf.at[0, "ons"] = tdf.iloc[0]["next_load"]
                 tdf.at[len(tdf) - 1, "offs"] = tdf.iloc[-1]["sampled_loads"]
                 sampled_ons_offs.append(tdf)
 
@@ -888,7 +872,7 @@ if __name__ == "__main__":
             "limit_service_hours_end_time": "06:00:00",
             "send_mail": False,
             "use_generative_models": False,
-            "noise_pct": [20],
+            "noise_pct": [80],
             "arrival_noise": True,
         }
 
