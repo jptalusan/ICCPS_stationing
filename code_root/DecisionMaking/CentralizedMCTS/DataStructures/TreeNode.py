@@ -1,25 +1,26 @@
 # Score is G
 # Reward is r or gamma
 
-class TreeNode:
 
-    def __init__(self,
-                 state,
-                 parent,
-                 depth,
-                 is_terminal,
-                 possible_actions,
-                 action_to_get_here,
-                 score,
-                 num_visits,
-                 children,
-                 reward_to_here,
-                 is_fully_expanded,
-                 actions_taken_tracker,
-                 event_at_node,
-                 future_events_queue,
-                 action_sequence_to_here=[]
-                 ):
+class TreeNode:
+    def __init__(
+        self,
+        state,
+        parent,
+        depth,
+        is_terminal,
+        possible_actions,
+        action_to_get_here,
+        score,
+        num_visits,
+        children,
+        reward_to_here,
+        is_fully_expanded,
+        actions_taken_tracker,
+        event_at_node,
+        future_events_queue,
+        action_sequence_to_here=[],
+    ):
         self.state = state
         self.parent = parent
         self.depth = depth

@@ -9,7 +9,7 @@
   "allowed_computation_time": 15,
   "vehicle_count": "10_limited",
   "oracle": true,
-  "method": "MCTS",
+  "method": "baseline",
   "use_intervals": true,
   "use_timepoints": true,
   "save_metrics": false,

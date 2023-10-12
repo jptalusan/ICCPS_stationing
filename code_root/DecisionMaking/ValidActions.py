@@ -3,13 +3,12 @@ import itertools
 from src.utils import *
 from Environment.enums import BusStatus, BusType, ActionType
 
-'''
+"""
 Should be tied with environment model since valid actions are a direct consequence of the current environment
-'''
+"""
 
 
 class ValidActions:
-
     def __init__(self, travel_model, logger) -> None:
         self.travel_model = travel_model
         self.logger = logger
@@ -21,7 +20,8 @@ class ValidActions:
         _state = copy.copy(state)
 
         num_available_buses = len(
-            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD]
+        )
         if num_available_buses <= 0:
             return []
 
@@ -37,15 +37,16 @@ class ValidActions:
                     continue
 
                 for arrival_time, pw in route_pw.items():
-                    remaining_passengers = pw['remaining']
-                    block_trip = pw['block_trip']
+                    remaining_passengers = pw["remaining"]
+                    block_trip = pw["block_trip"]
 
                     if block_trip in self.served_trips:
                         continue
 
                     if remaining_passengers > 0:
                         stops_with_left_behind_passengers.append(
-                            (stop_id, route_id_dir, arrival_time, remaining_passengers, block_trip))
+                            (stop_id, route_id_dir, arrival_time, remaining_passengers, block_trip)
+                        )
                         self.served_trips.append(block_trip)
 
         # Find broken buses
@@ -83,23 +84,24 @@ class ValidActions:
 
         # print("Number of valid actions:", len(valid_actions))
         if len(valid_actions) > 0:
-            valid_actions = [{'type': _va[0], 'overload_bus': _va[1], 'info': _va[2]} for _va in valid_actions]
+            valid_actions = [{"type": _va[0], "overload_bus": _va[1], "info": _va[2]} for _va in valid_actions]
         else:
             # No action
-            valid_actions = [{'type': ActionType.NO_ACTION, 'overload_bus': None, 'info': None}]
+            valid_actions = [{"type": ActionType.NO_ACTION, "overload_bus": None, "info": None}]
 
         # [print(state.buses[_va['overload_bus']].current_stop, _va) for _va in valid_actions]
         return valid_actions
 
     def get_valid_allocations(self, state):
         num_available_buses = len(
-            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD])
+            [_ for _ in state.buses.values() if _.status == BusStatus.IDLE and _.type == BusType.OVERLOAD]
+        )
         if num_available_buses <= 0:
             return []
 
         # valid_stops = list(state.stops.keys())
-        valid_stops = ['MTA', 'MCC5_1', 'NOLTAYSN', 'DWMRT', 'WHICHASF']
-        
+        valid_stops = ["MTA", "MCC5_1", "NOLTAYSN", "DWMRT", "WHICHASF"]
+
         # Based on spatial clustering k = 10
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
@@ -112,6 +114,6 @@ class ValidActions:
         valid_actions = []
         _valid_actions = [[ActionType.OVERLOAD_ALLOCATE], idle_overload_buses, valid_stops]
         _valid_actions = list(itertools.product(*_valid_actions))
-        
+
         valid_actions.extend(_valid_actions)
         return valid_actions

@@ -40,42 +40,43 @@ def run_low_level_mcts(arg_dict):
     :return:
     """
 
-    solver = ModularMCTS(mdp_environment_model=arg_dict['mdp_environment_model'],
-                         discount_factor=arg_dict['discount_factor'],
-                         iter_limit=arg_dict['iter_limit'],
-                         allowed_computation_time=arg_dict['allowed_computation_time'],
-                         rollout_policy=arg_dict['rollout_policy'],
-                         exploit_explore_tradoff_param=arg_dict['exploit_explore_tradoff_param'],
-                         action_type=arg_dict['action_type'])
+    solver = ModularMCTS(
+        mdp_environment_model=arg_dict["mdp_environment_model"],
+        discount_factor=arg_dict["discount_factor"],
+        iter_limit=arg_dict["iter_limit"],
+        allowed_computation_time=arg_dict["allowed_computation_time"],
+        rollout_policy=arg_dict["rollout_policy"],
+        exploit_explore_tradoff_param=arg_dict["exploit_explore_tradoff_param"],
+        action_type=arg_dict["action_type"],
+    )
 
-    res = solver.solve(arg_dict['current_state'],
-                       arg_dict['bus_arrival_events'],
-                       arg_dict['passenger_arrival_distribution'])
+    res = solver.solve(
+        arg_dict["current_state"], arg_dict["bus_arrival_events"], arg_dict["passenger_arrival_distribution"]
+    )
 
-    return {'region_id': arg_dict['tree_number'],
-            'mcts_res': res}
+    return {"region_id": arg_dict["tree_number"], "mcts_res": res}
 
 
 class DecisionMaker:
-
-    def __init__(self,
-                 environment_model,
-                 travel_model,
-                 dispatch_policy,
-                 logger,
-                 pool_thread_count,
-                 mcts_type,
-                 discount_factor,
-                 mdp_environment_model,
-                 rollout_policy,
-                 uct_tradeoff,
-                 iter_limit,
-                 lookahead_horizon_delta_t,
-                 allowed_computation_time,
-                 starting_date,
-                 oracle,
-                 base_dir,
-                 config):
+    def __init__(
+        self,
+        environment_model,
+        travel_model,
+        dispatch_policy,
+        pool_thread_count,
+        mcts_type,
+        discount_factor,
+        mdp_environment_model,
+        rollout_policy,
+        uct_tradeoff,
+        iter_limit,
+        lookahead_horizon_delta_t,
+        allowed_computation_time,
+        starting_date,
+        oracle,
+        base_dir,
+        config,
+    ):
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
@@ -99,20 +100,22 @@ class DecisionMaker:
         self.time_taken = {}
 
         self.action_type = None
-        self.logger = LogInit(pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False)
+        self.logger = LogInit(
+            pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False
+        )
 
     # Call the MCTS in parallel here
     def get_trips_with_remaining_passengers(self, state, limit=None):
         trips_with_remaining = sorted(state.trips_with_px_left, key=state.trips_with_px_left.get, reverse=True)
         if limit:
-            trips_with_remaining = trips_with_remaining[0:limit-1]
+            trips_with_remaining = trips_with_remaining[0 : limit - 1]
         trips_with_remaining = [i for i in trips_with_remaining if i]
         return trips_with_remaining
 
     # Check if current stop and scheduled times are timepoints, only do decisions then.
     def event_processing_callback_funct(self, actions, state, action_type):
         # Only do something when buses are available?
-        
+
         if len(self.get_trips_with_remaining_passengers(state)) <= 0 and action_type == ActionType.OVERLOAD_DISPATCH:
             print(f"Event counter: {self.event_counter}")
             print(f"Event: {state.bus_events[0]}")
@@ -120,7 +123,7 @@ class DecisionMaker:
             print("no incidents detected")
             print()
             return None
-        
+
         if self.any_available_overload_buses(state):
             self.action_type = action_type
             self.event_counter += 1
@@ -138,13 +141,12 @@ class DecisionMaker:
 
     def any_available_overload_buses(self, state):
         num_available_buses = len(
-            [_ for _ in state.buses.values()
-             if (
-                     (_.status == BusStatus.IDLE)
-                     or
-                     (_.status == BusStatus.ALLOCATION)
-             )
-             and _.type == BusType.OVERLOAD])
+            [
+                _
+                for _ in state.buses.values()
+                if ((_.status == BusStatus.IDLE) or (_.status == BusStatus.ALLOCATION)) and _.type == BusType.OVERLOAD
+            ]
+        )
         return num_available_buses > 0
 
     def process_mcts(self, state):
@@ -177,17 +179,19 @@ class DecisionMaker:
 
         if self.pool_thread_count == 0:
             res_dict = []
-            inputs = self.get_mcts_inputs(states=states,
-                                          bus_arrival_events=event_queues,
-                                          passenger_arrival_distribution=passenger_arrival_distribution,
-                                          discount_factor=self.discount_factor,
-                                          mdp_environment_model=self.mdp_environment_model,
-                                          rollout_policy=self.rollout_policy,
-                                          uct_tradeoff=self.uct_tradeoff,
-                                          iter_limit=self.iter_limit,
-                                          allowed_computation_time=self.allowed_computation_time,
-                                          mcts_type=self.mcts_type,
-                                          action_type=self.action_type)
+            inputs = self.get_mcts_inputs(
+                states=states,
+                bus_arrival_events=event_queues,
+                passenger_arrival_distribution=passenger_arrival_distribution,
+                discount_factor=self.discount_factor,
+                mdp_environment_model=self.mdp_environment_model,
+                rollout_policy=self.rollout_policy,
+                uct_tradeoff=self.uct_tradeoff,
+                iter_limit=self.iter_limit,
+                allowed_computation_time=self.allowed_computation_time,
+                mcts_type=self.mcts_type,
+                action_type=self.action_type,
+            )
 
             for input in inputs:
                 result = run_low_level_mcts(input)
@@ -196,54 +200,59 @@ class DecisionMaker:
             best_actions = dict()
 
             for i in range(len(res_dict)):
-                results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
-                actions = [_['action'] for _ in results[0]['scored_actions']]
+                results = [_["mcts_res"] for _ in res_dict if _["region_id"] == i]
+                actions = [_["action"] for _ in results[0]["scored_actions"]]
 
                 all_action_scores = []
                 for action in actions:
                     action_scores = []
                     action_visits = []
                     for result in results:
-                        action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
-                        action_scores.append(action_score['score'])
-                        action_visits.append(action_score['num_visits'])
+                        action_score = next((_ for _ in result["scored_actions"] if _["action"] == action), None)
+                        action_scores.append(action_score["score"])
+                        action_visits.append(action_score["num_visits"])
 
-                    all_action_scores.append({'action': action, 'scores': action_scores, 'num_visits': action_visits})
+                    all_action_scores.append({"action": action, "scores": action_scores, "num_visits": action_visits})
 
                 avg_action_scores = list()
                 for res in all_action_scores:
-                    avg_action_scores.append({'action': res['action'],
-                                              'avg_score': np.mean(res['scores']),
-                                              'num_visits': np.mean(res['num_visits'])})
+                    avg_action_scores.append(
+                        {
+                            "action": res["action"],
+                            "avg_score": np.mean(res["scores"]),
+                            "num_visits": np.mean(res["num_visits"]),
+                        }
+                    )
 
                 # We want the actions which result in the least passengers left behind
-                best_actions[i] = max(avg_action_scores, key=lambda _: _['avg_score'])
-                            
+                best_actions[i] = max(avg_action_scores, key=lambda _: _["avg_score"])
+
             best_score = -math.inf
             overall_best_action = None
             for _, actions in best_actions.items():
-                if actions['avg_score'] >= best_score:
-                    best_score = actions['avg_score']
-                    overall_best_action = actions['action']
+                if actions["avg_score"] >= best_score:
+                    best_score = actions["avg_score"]
+                    overall_best_action = actions["action"]
             final_action = overall_best_action
 
         else:
             start_pool_time = time.time()
             with Pool(processes=self.pool_thread_count) as pool:
-
                 pool_creation_time = time.time() - start_pool_time
 
-                inputs = self.get_mcts_inputs(states=states,
-                                              bus_arrival_events=event_queues,
-                                              passenger_arrival_distribution=passenger_arrival_distribution,
-                                              discount_factor=self.discount_factor,
-                                              mdp_environment_model=self.mdp_environment_model,
-                                              rollout_policy=self.rollout_policy,
-                                              uct_tradeoff=self.uct_tradeoff,
-                                              iter_limit=self.iter_limit,
-                                              allowed_computation_time=self.allowed_computation_time,
-                                              mcts_type=self.mcts_type,
-                                              action_type=self.action_type)
+                inputs = self.get_mcts_inputs(
+                    states=states,
+                    bus_arrival_events=event_queues,
+                    passenger_arrival_distribution=passenger_arrival_distribution,
+                    discount_factor=self.discount_factor,
+                    mdp_environment_model=self.mdp_environment_model,
+                    rollout_policy=self.rollout_policy,
+                    uct_tradeoff=self.uct_tradeoff,
+                    iter_limit=self.iter_limit,
+                    allowed_computation_time=self.allowed_computation_time,
+                    mcts_type=self.mcts_type,
+                    action_type=self.action_type,
+                )
 
                 # run_start_ = time.time()
                 res_dict = pool.map(run_low_level_mcts, inputs)
@@ -253,34 +262,44 @@ class DecisionMaker:
             all_actions = []
 
             for i in range(len(res_dict)):
-                results = [_['mcts_res'] for _ in res_dict if _['region_id'] == i]
-                actions = [_['action'] for _ in results[0]['scored_actions']]
-                
+                results = [_["mcts_res"] for _ in res_dict if _["region_id"] == i]
+                actions = [_["action"] for _ in results[0]["scored_actions"]]
+
                 for action in actions:
                     for result in results:
-                        action_score = next((_ for _ in result['scored_actions'] if _['action'] == action), None)
-                        if action not in [_a['action'] for _a in all_actions]:
-                            all_actions.append({'action':action, 'scores':[action_score['score']], 'visits': [action_score['num_visits']]})
+                        action_score = next((_ for _ in result["scored_actions"] if _["action"] == action), None)
+                        if action not in [_a["action"] for _a in all_actions]:
+                            all_actions.append(
+                                {
+                                    "action": action,
+                                    "scores": [action_score["score"]],
+                                    "visits": [action_score["num_visits"]],
+                                }
+                            )
                         else:
                             for _a in all_actions:
-                                if _a['action'] == action:
-                                    _a['scores'].append(action_score['score'])
-                                    _a['visits'].append(action_score['num_visits'])
-                            
+                                if _a["action"] == action:
+                                    _a["scores"].append(action_score["score"])
+                                    _a["visits"].append(action_score["num_visits"])
+
             avg_action_scores = list()
             for action in all_actions:
-                avg_action_scores.append({'action': action['action'],
-                                          'avg_score': np.mean(action['scores']),
-                                          'sum_visits': np.sum(action['visits'])})
-                
-            final_action = max(avg_action_scores, key=lambda _:_['avg_score'])['action']
+                avg_action_scores.append(
+                    {
+                        "action": action["action"],
+                        "avg_score": np.mean(action["scores"]),
+                        "sum_visits": np.sum(action["visits"]),
+                    }
+                )
 
-        self.time_taken['decision_maker'] = time.time() - decision_start
+            final_action = max(avg_action_scores, key=lambda _: _["avg_score"])["action"]
+
+        self.time_taken["decision_maker"] = time.time() - decision_start
 
         # sorted_actions = res_dict[0]['mcts_res']['scored_actions']
         # sorted_actions.sort(key=lambda _: _['score'], reverse=True)
-        avg_action_scores.sort(key=lambda _: _['avg_score'], reverse=True)
-        time_taken = res_dict[0]['mcts_res']['time_taken']
+        avg_action_scores.sort(key=lambda _: _["avg_score"], reverse=True)
+        time_taken = res_dict[0]["mcts_res"]["time_taken"]
 
         print(f"Event counter: {self.event_counter}")
         print(f"Event: {event_queues[0][0]}")
@@ -297,36 +316,38 @@ class DecisionMaker:
 
         return final_action
 
-    def get_mcts_inputs(self,
-                        states,
-                        bus_arrival_events,
-                        passenger_arrival_distribution,
-                        discount_factor,
-                        mdp_environment_model,
-                        rollout_policy,
-                        uct_tradeoff,
-                        iter_limit,
-                        allowed_computation_time,
-                        mcts_type,
-                        action_type):
+    def get_mcts_inputs(
+        self,
+        states,
+        bus_arrival_events,
+        passenger_arrival_distribution,
+        discount_factor,
+        mdp_environment_model,
+        rollout_policy,
+        uct_tradeoff,
+        iter_limit,
+        allowed_computation_time,
+        mcts_type,
+        action_type,
+    ):
         inputs = []
 
         # Based on how many parallel mcts we want
         # QUESTION: Copy? deepcopy? plain?
         for i in range(len(states)):
             input_dict = {}
-            input_dict['tree_number'] = i
-            input_dict['MCTS_type'] = mcts_type
-            input_dict['mdp_environment_model'] = mdp_environment_model
-            input_dict['discount_factor'] = discount_factor
-            input_dict['iter_limit'] = iter_limit
-            input_dict['exploit_explore_tradoff_param'] = uct_tradeoff
-            input_dict['allowed_computation_time'] = allowed_computation_time
-            input_dict['rollout_policy'] = rollout_policy
-            input_dict['bus_arrival_events'] = copy.deepcopy(bus_arrival_events[i])
-            input_dict['passenger_arrival_distribution'] = copy.copy(passenger_arrival_distribution[i])
-            input_dict['current_state'] = copy.deepcopy(states[i])
-            input_dict['action_type'] = action_type
+            input_dict["tree_number"] = i
+            input_dict["MCTS_type"] = mcts_type
+            input_dict["mdp_environment_model"] = mdp_environment_model
+            input_dict["discount_factor"] = discount_factor
+            input_dict["iter_limit"] = iter_limit
+            input_dict["exploit_explore_tradoff_param"] = uct_tradeoff
+            input_dict["allowed_computation_time"] = allowed_computation_time
+            input_dict["rollout_policy"] = rollout_policy
+            input_dict["bus_arrival_events"] = copy.deepcopy(bus_arrival_events[i])
+            input_dict["passenger_arrival_distribution"] = copy.copy(passenger_arrival_distribution[i])
+            input_dict["current_state"] = copy.deepcopy(states[i])
+            input_dict["action_type"] = action_type
             inputs.append(input_dict)
 
         return inputs
@@ -360,11 +381,13 @@ class DecisionMaker:
             idx = 10
         else:
             idx = 0
-            
+
         passenger_arrival_chains = []
         # Oracle
         if chain_count == 0:
-            with open(f'{environment_dir}/{self.starting_date}/sampled_ons_offs_dict_{self.starting_date}.pkl', 'rb') as handle:
+            with open(
+                f"{environment_dir}/{self.starting_date}/sampled_ons_offs_dict_{self.starting_date}.pkl", "rb"
+            ) as handle:
                 sampled_ons_offs_dict = pickle.load(handle)
                 passenger_arrival_chains.append(sampled_ons_offs_dict)
             return passenger_arrival_chains
@@ -372,12 +395,12 @@ class DecisionMaker:
             start_time = time.time()
 
             for chain in range(chain_count):
-                fp = f'{chain_dir}/{self.starting_date}/ons_offs_dict_chain_{self.starting_date}_{chain+idx}.pkl'
-                with open(fp, 'rb') as handle:
+                fp = f"{chain_dir}/{self.starting_date}/ons_offs_dict_chain_{self.starting_date}_{chain+idx}.pkl"
+                with open(fp, "rb") as handle:
                     sampled_ons_offs_dict = pickle.load(handle)
                     passenger_arrival_chains.append(sampled_ons_offs_dict)
 
-            self.time_taken['arrival_distributions'] = time.time() - start_time
+            self.time_taken["arrival_distributions"] = time.time() - start_time
 
             return passenger_arrival_chains
 

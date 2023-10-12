@@ -353,12 +353,14 @@ visualizer_root/nashville_HERE.geojson
 *.csv
 code_root/run_mcts_ALL.py
 code_root/run_mctsall.py
-data_generation/test.ipynb
 code_root/run_mcts_20211123.py
 
 code_root/experiments/*
 
 *.tar.gz
-data_generation/test.ipynb
 *.out
 data_generation/test.ipynb
+code_root/scenarios/common/*
+code_root/scenarios/DISRUPTION_CHAINS/*
+code_root/scenarios/DISRUPTION_MODEL_ENV/*
+code_root/scenarios/REALWORLD_ENV/*
