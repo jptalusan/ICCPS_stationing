@@ -1,16 +1,13 @@
-from spdlog import ConsoleLogger, LogLevel
+import logging
 import os
 
-name = "Console Logger"
-logger = ConsoleLogger("Logger", False, True, True)
-
-
-def set_log_level(logger, level):
-    print("Setting Log level to %d" % level)
-    logger.set_level(level)
-
-
-set_log_level(logger, LogLevel.INFO)
+logFormatter = logging.Formatter("[%(asctime)s][%(levelname)s][%(lineno)d] %(message)s", "%m-%d %H:%M:%S")
+logger = logging.getLogger("generate_day_trips")
+logger.setLevel(logging.DEBUG)
+streamHandler = logging.StreamHandler()
+streamHandler.setFormatter(logFormatter)
+streamHandler.setLevel(logging.DEBUG)
+logger.addHandler(streamHandler)
 
 from tensorflow.keras import backend as K
 
@@ -35,6 +32,9 @@ from pathlib import Path
 import smtplib
 import time
 
+from multiprocessing import Process, Queue, cpu_count, Manager, Pool
+from re import search
+
 mpl.rcParams["figure.facecolor"] = "white"
 
 import warnings
@@ -47,7 +47,6 @@ from pandas.errors import SettingWithCopyWarning
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 warnings.simplefilter(action="ignore", category=FutureWarning)
 tf.get_logger().setLevel("INFO")
-import pyspark
 
 spark = (
     SparkSession.builder.config("spark.executor.cores", "8")
@@ -72,6 +71,118 @@ spark = (
 
 CURR_DIR = "/home/jpt/gits/mta_simulator_redo/data_generation"
 rng = np.random.default_rng(12345)
+
+
+def pick_random_until_zero(row):
+    st = row["scheduled_time"]
+    val = row["ons"]
+    interval = pd.date_range(pd.Timestamp(st) - pd.Timedelta(minutes=10), pd.Timestamp(st), freq="min")
+    arrival_arr = []
+    val_arr = []
+    if val == 0:
+        return list(zip([0], [st]))
+    while val > 0:
+        try:
+            pick = random.randint(1, val)
+            val -= pick
+            val_arr.append(pick)
+        except ValueError as e:
+            logger.debug(val, pick, e)
+
+    try:
+        arrtimes = rng.choice(interval, size=len(val_arr), replace=False)
+        arrival_arr.append(list(zip(val_arr, arrtimes)))
+        arrival_arr = np.reshape(arrival_arr, (-1, 2))
+    except ValueError as e:
+        logger.debug(len(interval), len(val_arr))
+        arrival_arr.append(list(zip(val_arr, interval)))
+        arrival_arr = np.reshape(arrival_arr, (-1, 2))
+
+    return arrival_arr
+
+
+def process_to_parquet(path):
+    logger.info(f"Processing: {path}")
+    df = pd.read_parquet(path).reset_index()
+    # df = pd.DataFrame(df).reset_index()
+    df = df[
+        [
+            "route_id_dir",
+            "block_id",
+            "stop_sequence",
+            "stop_id",
+            "scheduled_time",
+            "trip_id",
+            "sampled_loads",
+            "ons",
+            "offs",
+        ]
+    ]
+
+    new_passenger_arrival_arr = []
+
+    for k, v in df.iterrows():
+        route_id_dir = v["route_id_dir"]
+        block_id = v["block_id"]
+        stop_sequence = v["stop_sequence"]
+        stop_id = v["stop_id"]
+        trip_id = v["trip_id"]
+        scheduled_time = v["scheduled_time"]
+        sampled_loads = v["sampled_loads"]
+        offs = v["offs"]
+        # scheduled_time = v['scheduled_time']
+        arrival_arr = pick_random_until_zero(v)
+
+        if len(arrival_arr) > 0:
+            idx = random.choice(list(range(len(arrival_arr))))
+            for i, (ons, arrival_time) in enumerate(arrival_arr):
+                if i != idx:
+                    offs = 0
+                _input = [
+                    route_id_dir,
+                    block_id,
+                    trip_id,
+                    stop_sequence,
+                    stop_id,
+                    scheduled_time,
+                    sampled_loads,
+                    ons,
+                    arrival_time,
+                    offs,
+                ]
+                new_passenger_arrival_arr.append(_input)
+        else:
+            _input = [
+                route_id_dir,
+                block_id,
+                trip_id,
+                stop_sequence,
+                stop_id,
+                scheduled_time,
+                sampled_loads,
+                0,
+                arrival_time,
+                offs,
+            ]
+            new_passenger_arrival_arr.append(_input)
+
+    tdf = pd.DataFrame(
+        new_passenger_arrival_arr,
+        columns=[
+            "route_id_dir",
+            "block_id",
+            "trip_id",
+            "stop_sequence",
+            "stop_id",
+            "scheduled_time",
+            "sampled_loads",
+            "ons",
+            "arrival_time",
+            "offs",
+        ],
+    )
+    tdf.to_parquet(f'{path.split(".")[0]}.parquet')
+    logger.info(f"Done: {path.split('.')[0]}.parquet")
 
 
 def get_apc_data_for_daterange(start_date, end_date):
@@ -595,7 +706,8 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
             df[out_columns].to_parquet(
                 f'results/chains/{DATE.replace("-","")}/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.parquet'
             )
-        reorganize_files(date=config["date"])
+        extra_label = reorganize_files(date=config["date"])
+        return extra_label
 
 
 def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
@@ -683,7 +795,8 @@ def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
                     f"Saving df to results/chains/{DATE.replace('-','')}/ons_offs_dict_noise_{noise_level}_chain_{DATE.replace('-','')}_{chain - 1}.parquet"
                 )
 
-        reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
+        extra_label = reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
+        return extra_label
 
 
 def reorganize_files(date, extra_label=None):
@@ -718,6 +831,29 @@ def reorganize_files(date, extra_label=None):
     if os.path.exists(f"{chains_dir}/{date_str}"):
         os.rename(f"{chains_dir}/{date_str}", f"{date_dir}/chains")
 
+    return extra_label
+
+
+def add_noise_to_arrivals(dir=None):
+    paths = []
+    for root, dirs, files in os.walk(dir):
+        if "chains" in dirs:
+            chain_dir = f"{root}/{dirs[0]}"
+            for croot, cdirs, cfiles in os.walk(chain_dir):
+                for file in cfiles:
+                    if search(r"ons_offs_dict_chain.*\d{8}_\d+.parquet", file):
+                        logger.debug(f"Starting: {file}")
+                        _pkl = os.path.join(croot, file)
+                        paths.append(_pkl)
+
+    with Pool(processes=cpu_count() - 2) as pool:
+        pool.map(process_to_parquet, paths)
+
+        pool.close()
+        pool.join()
+
+    logger.info("Finished randomizing arrival times.")
+
 
 # Setting noise_pct to 0 and chains to 0 will be equivalent to real_world.
 if __name__ == "__main__":
@@ -746,17 +882,19 @@ if __name__ == "__main__":
             "start_date": "2022-10-01",
             "end_date": "2022-10-31",
             "frequency_h": 24,
-            "chains": 0,
+            "chains": 2,
             "limit_service_hours": False,
             "limit_service_hours_start_time": "03:00:00",
             "limit_service_hours_end_time": "06:00:00",
             "send_mail": False,
             "use_generative_models": False,
             "noise_pct": [20],
+            "arrival_noise": True,
         }
 
         logger.info(f"Config: {config}")
         CHAINS = config["chains"]
+        extra_label = None
 
         if config["is_date_range"]:
             dates = pd.date_range(config["start_date"], config["end_date"], freq=f'{config["frequency_h"]}h')
@@ -766,23 +904,31 @@ if __name__ == "__main__":
             for date in tqdm(dates):
                 a = df.query("transit_date == @date")
                 if config.get("use_generative_models", False):
-                    generate_traffic_data_for_date(a, date, config, CHAINS)
+                    extra_label = generate_traffic_data_for_date(a, date, config, CHAINS)
                 else:
                     pass
         else:
             apcdata = get_apc_data_for_date(config["date"])
             df = apcdata.toPandas()
             if config.get("use_generative_models", False):
-                generate_traffic_data_for_date(df, config["date"], config, CHAINS)
+                extra_label = generate_traffic_data_for_date(df, config["date"], config, CHAINS)
             else:
-                generate_noisy_data_for_date(df, config["date"], config, CHAINS)
+                extra_label = generate_noisy_data_for_date(df, config["date"], config, CHAINS)
 
-            elapsed = time.time() - start_time
-            if config["send_mail"]:
-                try:
-                    send_email("GENERATE_DAY_TRIPS", f"Done in: {elapsed} seconds.")
-                except:
-                    pass
+        if config.get("arrival_noise", False):
+            if extra_label:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
+            else:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
+            logger.debug(f"Start to add noise for: {dir}")
+            add_noise_to_arrivals(dir=dir)
+
+        elapsed = time.time() - start_time
+        if config["send_mail"]:
+            try:
+                send_email("GENERATE_DAY_TRIPS", f"Done in: {elapsed} seconds.")
+            except:
+                pass
 
         logger.info(f"Done generating for {d}")
 
