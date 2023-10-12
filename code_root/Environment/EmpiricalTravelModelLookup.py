@@ -198,6 +198,13 @@ class EmpiricalTravelModelLookup:
 
         return last_trip_arrival
 
+    def is_bus_at_last_stop(self, current_stop, trip):
+        trip_data = self.trip_plan[trip]
+        last_stop_id = trip_data["last_stop_id"]
+        if current_stop == last_stop_id or ((current_stop == "MCC") and (current_stop in last_stop_id[0:3])):
+            return True
+        return False
+
     def get_list_of_stops_for_trip(self, trip, current_stop_number):
         trip_data = self.trip_plan[trip]
         stop_id_original = trip_data["stop_id_original"]

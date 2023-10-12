@@ -27,7 +27,6 @@ import json
 import pickle
 import numpy as np
 import pandas as pd
-import spdlog as spd
 import datetime as dt
 from pathlib import Path
 
@@ -356,17 +355,23 @@ def run_simulation(config, chain=None):
         travel_model=travel_model,
     )
 
+    import time
+
+    start_time = time.time()
     score = simulator.run_simulation()
     print(score)
+    elapsed = time.time() - start_time
+    # logger.info(f"Simulator run time: {elapsed:.2f} s")
+    print(f"Simulator run time: {elapsed:.2f} s")
     return score
 
 
 if __name__ == "__main__":
     config = {
-        "starting_date_str": "20200307",
+        "starting_date_str": "20221005",
         "real_world_dir": "REALWORLD_ENV",
         "iter_limit": 1,
-        "pool_thread_count": 0,
+        "pool_thread_count": 1,
         "mcts_discount_factor": 0.99997,
         "uct_tradeoff": 416777,
         "lookahead_horizon_delta_t": 3600,
@@ -383,7 +388,7 @@ if __name__ == "__main__":
         "early_end": False,
         "scenario": "1B",
         "mcts_log_name": "test",
-        "overload_start_depots": {"41": "MCC"},
+        "overload_start_depots": {"41": "MCC", "42": "MCC"},
     }
 
     _dir = "."
@@ -416,8 +421,10 @@ if __name__ == "__main__":
     streamHandler.setLevel(logging.DEBUG)
 
     logger.addHandler(fileHandler)
+    # logger.addHandler(logging.NullHandler())
     # logger.addHandler(streamHandler)
 
     logger.debug("Starting process.")
-    run_simulation(config)
+    print(config.get("pool_thread_count", 0))
+    run_simulation(config, chain=config.get("pool_thread_count", 0))
     pass

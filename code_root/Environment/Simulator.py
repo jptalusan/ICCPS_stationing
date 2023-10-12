@@ -94,25 +94,34 @@ class Simulator:
         # print(f"Done:{dt.datetime.now()}")
         # TODO: Calculate the deadmiles traveled to go back to the main depot (in nestor or MCC)
 
+        self.return_sub_buses_to_garage()
+
         self.print_states(csv=True)
         # self.print_res()
         log(self.logger, dt.datetime.now(), "Finished simulation (real world time)", LogType.INFO)
 
         return self.get_score()
 
+    def return_sub_buses_to_garage(self):
+        for bus_id, bus_obj in self.state.buses.items():
+            if bus_obj.type == BusType.OVERLOAD:
+                tt = 0
+                dd = 0
+                if "MTA" not in bus_obj.current_stop[0:3]:
+                    tt, dd = self.travel_model.get_traveltime_distance_from_stops(
+                        bus_obj.current_stop, "MTA", self.state.time
+                    )
+                bus_obj.total_deadkms_moved += dd
+                bus_obj.total_deadsecs_moved += tt
+                bus_obj.current_stop = "MTA"
+
     def get_score(self):
         a = 0
         b = 0
         for bus_id, bus_obj in self.state.buses.items():
             if bus_obj.type == BusType.OVERLOAD:
-                tt = 0
-                dd = 0
-                if "MCC" not in bus_obj.current_stop[0:3]:
-                    tt, dd = self.travel_model.get_traveltime_distance_from_stops(
-                        bus_obj.current_stop, "MCC5_11", self.state.time
-                    )
-                a += bus_obj.total_deadkms_moved + bus_obj.partial_deadkms_moved + dd
-                b += bus_obj.total_deadsecs_moved + tt
+                a += bus_obj.total_deadkms_moved + bus_obj.partial_deadkms_moved
+                b += bus_obj.total_deadsecs_moved
 
         c = 0
         for stop_id, stop_obj in self.state.stops.items():
@@ -424,8 +433,8 @@ class Simulator:
                 for p_set in passenger_set_counts:
                     d += p_set["ons"]
                 # csvlogger.info(f"{a},{b},{c},{d}")
-                if float(b) + float(c) + d > 0:
-                    log(self.csvlogger, None, f"{a},{b},{c},{d}")
+                # if float(b) + float(c) + d > 0:
+                log(self.csvlogger, None, f"{a},{b},{c},{d}")
 
         total_walk_aways = 0
         total_arrivals = 0

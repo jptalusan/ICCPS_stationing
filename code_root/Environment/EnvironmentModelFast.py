@@ -40,7 +40,7 @@ class EnvironmentModelFast:
             assert new_time >= state.time
 
         # print(curr_event)
-        log(self.logger, new_time, f"Event: {curr_event}", LogType.DEBUG)
+        # log(self.logger, new_time, f"Event: {curr_event}", LogType.DEBUG)
 
         new_events = []
         if curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP:
@@ -122,7 +122,7 @@ class EnvironmentModelFast:
                             state.buses[bus_id].total_deadkms_moved += distance
                             state.buses[bus_id].total_deadsecs_moved += travel_time
                             log(
-                                self.csvlogger,
+                                self.logger,
                                 state.time,
                                 f"Bus {bus_id} moves {distance:.2f} deadkms.",
                                 LogType.DEBUG,
@@ -283,12 +283,34 @@ class EnvironmentModelFast:
         type_specific_information = curr_event.type_specific_information
         arrival_time = curr_event.time
         bus_id = type_specific_information["bus_id"]
+
+        try:
+            assert isinstance(passenger_time_to_leave, int)
+        except:
+            log(
+                self.logger,
+                curr_time=None,
+                message=f"Passenger time type: {type(passenger_time_to_leave)}",
+                type=LogType.ERROR,
+            )
+            print(bus_id, type(passenger_time_to_leave))
+        try:
+            assert isinstance(arrival_time, dt.datetime)
+        except:
+            log(self.logger, curr_time=None, message=f"arrival_time type: {type(arrival_time)}", type=LogType.ERROR)
+            print(bus_id, type(arrival_time))
+
         curr_stop = type_specific_information["stop_id"]
         current_stop_number = type_specific_information["stop"]
         curr_route_id_dir = type_specific_information["route_id_direction"]
         curr_block_trip_id = type_specific_information["current_block_trip"]
         curr_block_id = type_specific_information["current_block_trip"][0]
         curr_trip_id = type_specific_information["current_block_trip"][1]
+
+        try:
+            assert isinstance(curr_block_id, str)
+        except:
+            curr_block_id = str(curr_block_id)
 
         bus_object = state.buses[bus_id]
         vehicle_capacity = bus_object.capacity
@@ -314,8 +336,8 @@ class EnvironmentModelFast:
             filter(
                 lambda x: (
                     (x["route_id_dir"] == curr_route_id_dir)
-                    & (x["arrival_time"] <= pd.Timestamp(arrival_time))
-                    & (x["arrival_time"] < pd.Timestamp(arrival_time) + pd.Timedelta(passenger_time_to_leave))
+                    & (x["arrival_time"] <= arrival_time)
+                    & (x["arrival_time"] + pd.Timedelta(passenger_time_to_leave, unit="min") >= arrival_time)
                     & (x["block_id"] == int(curr_block_id))
                 ),
                 passenger_set_counts,
@@ -335,8 +357,8 @@ class EnvironmentModelFast:
             filter(
                 lambda x: (
                     (x["route_id_dir"] != curr_route_id_dir)
-                    | (x["arrival_time"] > pd.Timestamp(arrival_time))
-                    | (x["arrival_time"] >= pd.Timestamp(arrival_time) + pd.Timedelta(passenger_time_to_leave))
+                    | (x["arrival_time"] > arrival_time)
+                    | (x["arrival_time"] + pd.Timedelta(passenger_time_to_leave, unit="min") < arrival_time)
                     | (x["block_id"] != int(curr_block_id))
                 ),
                 passenger_set_counts,
@@ -380,6 +402,11 @@ class EnvironmentModelFast:
             got_on_bus = ons
             remaining = 0
 
+        if self.travel_model.is_bus_at_last_stop(curr_stop, curr_block_trip_id[1]):
+            offs = bus_object.current_load
+            got_on_bus = 0
+            pass
+
         stop_object.total_passenger_ons += got_on_bus
         stop_object.total_passenger_offs += offs
 
@@ -389,14 +416,14 @@ class EnvironmentModelFast:
 
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(curr_block_trip_id, current_stop_number)
 
-        if got_on_bus or offs:
-            log_str = f"""Bus {bus_id} on trip: {curr_trip_id} scheduled for {scheduled_arrival_time} \
+        # if got_on_bus or offs:
+        log_str = f"""Bus {bus_id} on trip: {curr_trip_id} scheduled for {scheduled_arrival_time} \
 arrives at {curr_stop}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
-            log(self.logger, state.time, log_str, LogType.INFO)
+        log(self.logger, state.time, log_str, LogType.INFO)
 
-            # picked_list_str = ','.join([f"{p['arrival_time']}:{p['ons']}:{p['offs']}:{p['block_id']}" for p in passenger_df[mask]])
-            # log(self.logger, state.time, f"Picked up {len(passenger_df[mask].index)} sets of passengers: {picked_list_str}.", LogType.DEBUG)
+        # picked_list_str = ','.join([f"{p['arrival_time']}:{p['ons']}:{p['offs']}:{p['block_id']}" for p in passenger_df[mask]])
+        # log(self.logger, state.time, f"Picked up {len(passenger_df[mask].index)} sets of passengers: {picked_list_str}.", LogType.DEBUG)
 
         if remaining:
             log(
@@ -453,6 +480,11 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 stop_id = info[0]
                 stop_no = info[1]
                 current_block_trip = info[4]
+
+                # Don't dispatch to the same block trip.
+                if current_block_trip in state.served_trips:
+                    return new_events, state.time
+
                 # ofb_id = res["bus_id"]
 
                 ofb_obj = state.buses[ofb_id]
@@ -470,7 +502,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 route_id_direction = self.travel_model.get_route_id_direction(current_block_trip)
                 ofb_obj.total_deadkms_moved += distance
                 ofb_obj.total_deadsecs_moved += travel_time
-                log(self.csvlogger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
+                log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 
                 time_of_activation = state.time
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
@@ -495,7 +527,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
                 new_events.append(event)
 
                 log(
-                    self.csvlogger,
+                    self.logger,
                     state.time,
                     f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
                     LogType.ERROR,
