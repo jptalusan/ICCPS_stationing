@@ -14,10 +14,6 @@ class EnvironmentModelFast:
         self.csvlogger = logging.getLogger("csvlogger")
         self.logger = logging.getLogger("debuglogger")
         self.config = config
-
-        self.served_trips = []
-        self.served_buses = []
-
         self.dispatch_policy = HeuristicDispatch(travel_model)
 
     def update(self, state, curr_event):
@@ -483,6 +479,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
 
                 # Don't dispatch to the same block trip.
                 if current_block_trip in state.served_trips:
+                    log(self.logger, state.time, f"Trip: {current_block_trip} already being served.", LogType.DEBUG)
                     return new_events, state.time
 
                 # ofb_id = res["bus_id"]

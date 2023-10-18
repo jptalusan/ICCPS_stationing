@@ -9,17 +9,11 @@ class NearestCoordinator:
     def __init__(self, travel_model, dispatch_policy, config):
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
-        self.trips_already_covered = []
-        self.broken_buses_covered = []
         self.config = config
 
     def event_processing_callback_funct(self, actions, state, action_type):
         valid_actions = self.generate_possible_actions(state, action_type)
         action_to_take = self.select_overload_to_dispatch(state, valid_actions)
-        if action_to_take["type"] == ActionType.OVERLOAD_DISPATCH:
-            self.trips_already_covered.append(action_to_take["info"])
-        if action_to_take["type"] == ActionType.OVERLOAD_TO_BROKEN:
-            self.broken_buses_covered.append(action_to_take["info"])
 
         return action_to_take
 
@@ -43,6 +37,8 @@ class NearestCoordinator:
             # _valid_actions = self.get_valid_allocations(state)
             # valid_actions.extend(_valid_actions)
             pass
+
+        # TODO Should we also consider all future stops in the trip?
         elif action_type == ActionType.OVERLOAD_DISPATCH:
             VEHICLE_CAPACITY = 40
             OVERAGE_THRESHOLD = 0.05
@@ -53,7 +49,7 @@ class NearestCoordinator:
             for stop_id, stop_obj in state.stops.items():
                 passenger_set_counts = stop_obj.passenger_waiting_dict_list
                 for p_set in passenger_set_counts:
-                    if p_set.get("left"):
+                    if p_set.get("left", False):
                         remaining_passengers = p_set["ons"]
                         if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
                             arrival_time = p_set["arrival_time"]
@@ -62,6 +58,8 @@ class NearestCoordinator:
                             trip_id = p_set["trip_id"]
                             route_id_dir = p_set["route_id_dir"]
                             block_trip = (block_id, str(trip_id))
+                            if block_trip in state.served_trips:
+                                continue
                             stops_with_left_behind_passengers.append(
                                 (
                                     stop_id,

@@ -377,7 +377,7 @@ if __name__ == "__main__":
         "lookahead_horizon_delta_t": 3600,
         "rollout_horizon_delta_t": 3600,
         "allowed_computation_time": 15,
-        "vehicle_count": "",
+        "vehicle_count": "10",
         "oracle": True,
         "method": "baseline",
         "use_intervals": True,
@@ -427,4 +427,3 @@ if __name__ == "__main__":
     logger.debug("Starting process.")
     print(config.get("pool_thread_count", 0))
     run_simulation(config, chain=config.get("pool_thread_count", 0))
-    pass
