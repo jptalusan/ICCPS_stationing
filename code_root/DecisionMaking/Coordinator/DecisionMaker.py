@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from Environment.DataStructures.Event import Event
 from Environment.enums import LogType, EventType, BusStatus, BusType, ActionType
 from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
+from Environment.DataStructures.State import State
 from src.utils import *
 import math
 from fastlogging import LogInit
@@ -50,9 +51,7 @@ def run_low_level_mcts(arg_dict):
         action_type=arg_dict["action_type"],
     )
 
-    res = solver.solve(
-        arg_dict["current_state"], arg_dict["bus_arrival_events"], arg_dict["passenger_arrival_distribution"]
-    )
+    res = solver.solve(arg_dict["current_state"], arg_dict["bus_arrival_events"])
 
     return {"region_id": arg_dict["tree_number"], "mcts_res": res}
 
@@ -80,7 +79,6 @@ class DecisionMaker:
         self.environment_model = environment_model
         self.travel_model = travel_model
         self.dispatch_policy = dispatch_policy
-        self.logger = logger
         self.event_counter = 0
         self.pool_thread_count = pool_thread_count
         self.mcts_type = mcts_type
@@ -106,7 +104,26 @@ class DecisionMaker:
 
     # Call the MCTS in parallel here
     def get_trips_with_remaining_passengers(self, state, limit=None):
-        trips_with_remaining = sorted(state.trips_with_px_left, key=state.trips_with_px_left.get, reverse=True)
+        VEHICLE_CAPACITY = 40
+        OVERAGE_THRESHOLD = 0.05
+        trips_with_remaining = []
+        # for stop_id, stop_obj in state.stops.items():
+        for p_set in state.people_left_behind:
+            if p_set.get("left_behind", False):
+                remaining_passengers = p_set["ons"]
+                if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
+                    block_id = p_set["block_id"]
+                    trip_id = p_set["trip_id"]
+                    block_trip = (block_id, str(trip_id))
+                    if block_trip in state.served_trips:
+                        continue
+                    trips_with_remaining.append(
+                        (
+                            remaining_passengers,
+                            block_trip,
+                        )
+                    )
+        trips_with_remaining = sorted(trips_with_remaining, key=lambda x: x[0], reverse=True)
         if limit:
             trips_with_remaining = trips_with_remaining[0 : limit - 1]
         trips_with_remaining = [i for i in trips_with_remaining if i]
@@ -154,23 +171,27 @@ class DecisionMaker:
         if ORACLE:
             CHAINS = 0
             event_queues = self.load_events(state)
-            state = [state]
+            states = [state]
         else:
             CHAINS = self.pool_thread_count
             event_queues = self.get_event_chains(state)
             if CHAINS > 0:
                 event_queues = event_queues * CHAINS
-            state = [state] * CHAINS
-
-        passenger_arrival_distribution = self.get_passenger_arrival_distributions(chain_count=CHAINS)
+            states = [state] * CHAINS
+            states = []
+            # TODO Can probably prune this based on state.time so it doesn't copy all
+            for chain in range(CHAINS):
+                _state = copy.deepcopy(state)
+                _state.stops = copy.deepcopy(state.stop_chains[chain])
+                states.append(_state)
 
         if len(event_queues[0]) <= 0:
             return None
 
-        result = self.get_action(state, event_queues, passenger_arrival_distribution)
+        result = self.get_action(states, event_queues)
         return result
 
-    def get_action(self, states, event_queues, passenger_arrival_distribution):
+    def get_action(self, states, event_queues, passenger_arrival_distribution=None):
         # print(event_queues)
         final_action = {}
         # For display
@@ -182,7 +203,6 @@ class DecisionMaker:
             inputs = self.get_mcts_inputs(
                 states=states,
                 bus_arrival_events=event_queues,
-                passenger_arrival_distribution=passenger_arrival_distribution,
                 discount_factor=self.discount_factor,
                 mdp_environment_model=self.mdp_environment_model,
                 rollout_policy=self.rollout_policy,
@@ -243,7 +263,6 @@ class DecisionMaker:
                 inputs = self.get_mcts_inputs(
                     states=states,
                     bus_arrival_events=event_queues,
-                    passenger_arrival_distribution=passenger_arrival_distribution,
                     discount_factor=self.discount_factor,
                     mdp_environment_model=self.mdp_environment_model,
                     rollout_policy=self.rollout_policy,
@@ -320,7 +339,6 @@ class DecisionMaker:
         self,
         states,
         bus_arrival_events,
-        passenger_arrival_distribution,
         discount_factor,
         mdp_environment_model,
         rollout_policy,
@@ -345,7 +363,6 @@ class DecisionMaker:
             input_dict["allowed_computation_time"] = allowed_computation_time
             input_dict["rollout_policy"] = rollout_policy
             input_dict["bus_arrival_events"] = copy.deepcopy(bus_arrival_events[i])
-            input_dict["passenger_arrival_distribution"] = copy.copy(passenger_arrival_distribution[i])
             input_dict["current_state"] = copy.deepcopy(states[i])
             input_dict["action_type"] = action_type
             inputs.append(input_dict)
@@ -371,38 +388,6 @@ class DecisionMaker:
             _events = [events[0]]
 
         return [_events]
-
-    def get_passenger_arrival_distributions(self, chain_count=1):
-        chain_dir = f'{self.base_dir}/{self.config["chains_dir"]}'
-        environment_dir = f'{self.base_dir}/{self.config["real_world_dir"]}'
-
-        # HACK: Fix the files instead of this.
-        if self.config["chains_dir"] == "MODEL_CHAINS":
-            idx = 10
-        else:
-            idx = 0
-
-        passenger_arrival_chains = []
-        # Oracle
-        if chain_count == 0:
-            with open(
-                f"{environment_dir}/{self.starting_date}/sampled_ons_offs_dict_{self.starting_date}.pkl", "rb"
-            ) as handle:
-                sampled_ons_offs_dict = pickle.load(handle)
-                passenger_arrival_chains.append(sampled_ons_offs_dict)
-            return passenger_arrival_chains
-        else:
-            start_time = time.time()
-
-            for chain in range(chain_count):
-                fp = f"{chain_dir}/{self.starting_date}/ons_offs_dict_chain_{self.starting_date}_{chain+idx}.pkl"
-                with open(fp, "rb") as handle:
-                    sampled_ons_offs_dict = pickle.load(handle)
-                    passenger_arrival_chains.append(sampled_ons_offs_dict)
-
-            self.time_taken["arrival_distributions"] = time.time() - start_time
-
-            return passenger_arrival_chains
 
     # Generate processed chains using generate_chains_pickles.ipynb
     def get_event_chains(self, state):

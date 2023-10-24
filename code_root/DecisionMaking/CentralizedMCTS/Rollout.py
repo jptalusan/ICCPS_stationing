@@ -29,11 +29,10 @@ class BareMinimumRollout:
 
         self.total_walkaways = 0
 
-    def rollout(self, node, environment_model, discount_factor, solve_start_time, passenger_arrival_distribution):
+    def rollout(self, node, environment_model, discount_factor, solve_start_time):
         s_copy_time = time.time()
         self.debug_rewards = []
         self.total_walkaways = 0
-        self.passenger_arrival_distribution = passenger_arrival_distribution
 
         truncated_events = copy.copy(node.future_events_queue)
 
@@ -137,5 +136,5 @@ class BareMinimumRollout:
         return discounted_reward
 
     def process_event(self, state, event, environment_model):
-        new_events = environment_model.update(state, event, self.passenger_arrival_distribution)
+        new_events = environment_model.update(state, event)
         return new_events

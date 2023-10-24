@@ -19,10 +19,10 @@ from Environment.enums import BusStatus, BusType, EventType, MCTSType, LogType
 from Environment.EnvironmentModelFast import EnvironmentModelFast
 from Environment.Simulator import Simulator
 from src.utils import *
-from tqdm import tqdm
-import argparse
 import copy
+import time
 import logging
+import argparse
 import json
 import pickle
 import numpy as np
@@ -196,50 +196,90 @@ def manually_insert_disruption(events, buses, bus_id, time):
 
 # TODO: Fix config json to add CHAIN_DIR
 # Only load passenger events which will be visited by buses (to keep it fair)
+# passenger_waiting_dict_list should be a 2D list (one list per chain) then just use the chain required.
+# first element should be the real world. But what a
 def load_passengers_events(Stops, active_stops, REALWORLD_DIR, starting_date_str, chain=None, active_trips=[]):
-    # print(f"chain: {chain}")
-    if not chain:
-        df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}.parquet")
-        # print("Using initial chain.")
-    else:
-        df = pd.read_parquet(
-            f"{BASE_DIR}/scenarios/DISRUPTION_CHAINS/{starting_date_str}/chains/ons_offs_dict_chain_{starting_date_str}_{chain - 1}.parquet"
-        )
-        # print("Using chains")
-
-    df = df[(df["ons"] > 0) | (df["offs"] > 0)]
-    for k, v in df.iterrows():
-        if "MCC" in v["stop_id"][0:3]:
-            stop_id = "MCC"
+    print(f"Start passenger data load.")
+    start = time.time()
+    list_of_stops = []
+    all_ons = []
+    for c in range(chain):
+        _stops = copy.deepcopy(Stops)
+        # HACK Switched df for testing
+        if not c:
+            df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}_FIX.parquet")
+            print("Using initial chain.")
         else:
-            stop_id = v["stop_id"]
-        if stop_id not in active_stops:
-            continue
-        if v["trip_id"] not in active_trips:
-            continue
-        arrival_input = {
-            "route_id_dir": v["route_id_dir"],
-            "block_id": v["block_id"],
-            "trip_id": v["trip_id"],
-            "stop_sequence": v["stop_sequence"],
-            "scheduled_time": v["scheduled_time"],
-            "arrival_time": v["arrival_time"],
-            "ons": v["ons"],
-            "offs": v["offs"],
-        }
-        Stops[stop_id].passenger_waiting_dict_list.append(arrival_input)
-    return Stops
+            df = pd.read_parquet(
+                f"{BASE_DIR}/scenarios/DISRUPTION_CHAINS/{starting_date_str}/chains/ons_offs_dict_chain_{starting_date_str}_{chain - 1}.parquet"
+            )
+            print("Using chains")
+        df["stop_id"] = np.where(df["stop_id"].str.startswith("MCC"), "MCC", df["stop_id"])
+        df = df[df["stop_id"].isin(active_stops)]
+        df = df[df["trip_id"].isin(active_trips)]
+
+        # df = df[(df["ons"] > 0) | (df["offs"] > 0)]
+        # Use np.where to apply the conversion condition
+        # TODO Problem is in all chains, not all steps are present, need to get superset.
+        # FIX is to just check if chain exists on handle passenger arrival()..
+        print("MCC" in df.stop_id.unique().tolist())
+        df = df.drop(columns=["sampled_loads", "next_load"], errors="ignore")
+        all_ons.append(df["ons"].sum())
+        for stop_id, stop_df in df.groupby("stop_id"):
+            if stop_id not in active_stops:
+                continue
+            arrival_input = stop_df.to_dict(orient="records")
+            _stops[stop_id].passenger_waiting_dict_list = arrival_input
+        list_of_stops.append(_stops)
+    elapsed = time.time() - start
+    print(f"Done loading in {elapsed:0f} seconds")
+    max_ons = max(all_ons)
+    return list_of_stops, max_ons
 
 
-def load_passengers_alights(REALWORLD_DIR, starting_date_str):
-    df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}.parquet")
-    df = df.query("offs > 0")
-    return df
+def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
+    earliest_datetime = starting_date + dt.timedelta(days=2)
+    latest_datetime = starting_date
+    for bus_id, bus_obj in buses.items():
+        if bus_obj.type == BusType.OVERLOAD:
+            continue
+
+        bus_block_trips = bus_obj.bus_block_trips + [bus_obj.current_block_trip]
+        for bbt in bus_block_trips:
+            trip = bbt[1]
+            plan = trip_plan[trip]
+            schedule = plan["scheduled_time"]
+            first_stop = str_timestamp_to_datetime(schedule[0])
+            last_stop = str_timestamp_to_datetime(schedule[-1])
+            if first_stop <= earliest_datetime:
+                earliest_datetime = first_stop
+            if last_stop >= latest_datetime:
+                latest_datetime = last_stop
+
+    # Use actual times and dont round down/up
+    # earliest_datetime = earliest_datetime - dt.timedelta(minutes=30)
+    if latest_datetime.hour < 23:
+        # latest_datetime = latest_datetime.replace(hour=latest_datetime.hour + 1, minute=0, second=0, microsecond=0)
+        latest_datetime = latest_datetime + dt.timedelta(minutes=15)
+    else:
+        latest_datetime = latest_datetime.replace(hour=latest_datetime.hour, minute=59, second=0, microsecond=0)
+
+    datetime_range = pd.date_range(earliest_datetime, latest_datetime, freq=f"{intervals}min")
+    # datetime_range = np.arange(earliest_datetime, latest_datetime, np.timedelta64(intervals, 'm'))
+    for _dt in datetime_range:
+        event = Event(
+            event_type=EventType.DECISION_ALLOCATION_EVENT, time=_dt, type_specific_information={"bus_id": None}
+        )
+        bus_arrival_events.append(event)
+
+    bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
+    return bus_arrival_events
 
 
 # Almost the same as the main function.
 def run_simulation(config, chain=None):
-    logger = None
+    # logger = None
+    logger = logging.getLogger("debuglogger")
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config["starting_date_str"]
@@ -262,7 +302,10 @@ def run_simulation(config, chain=None):
         bus_plan = json.load(f)
 
     LOOKUP_DIR = f"{BASE_DIR}/scenarios"
+    start_time = time.time()
     travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, config=config, logger=None)
+    elapsed_time = time.time() - start_time
+    print(f"Lookup loading time: {elapsed_time:.2f} s")
     dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
@@ -277,7 +320,7 @@ def run_simulation(config, chain=None):
         REALWORLD_DIR, travel_model, starting_date_str, Buses, Stops, trip_plan
     )
 
-    Stops = load_passengers_events(
+    stop_chains, max_ons = load_passengers_events(
         Stops, active_stops, REALWORLD_DIR, starting_date_str, chain=chain, active_trips=active_trips
     )
     # print(dt.datetime.now())
@@ -302,8 +345,20 @@ def run_simulation(config, chain=None):
     bus_arrival_events.insert(0, bus_arrival_events[0])
 
     starting_state = copy.deepcopy(
-        State(stops=Stops, buses=Buses, bus_events=bus_arrival_events, time=bus_arrival_events[0].time)
+        State(stops=stop_chains[0], buses=Buses, bus_events=bus_arrival_events, time=bus_arrival_events[0].time)
     )
+
+    starting_state.stop_chains = stop_chains
+
+    # Adding interval events
+    if config["reallocation"]:
+        before_count = len(bus_arrival_events)
+        bus_arrival_events = manually_insert_allocation_events(
+            bus_arrival_events, starting_date, Buses, trip_plan, intervals=60
+        )
+        after_count = len(bus_arrival_events)
+
+        log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count - before_count}", LogType.INFO)
 
     rollout_policy = BareMinimumRollout(
         rollout_horizon_delta_t=config["rollout_horizon_delta_t"], dispatch_policy=dispatch_policy
@@ -312,6 +367,7 @@ def run_simulation(config, chain=None):
     mcts_discount_factor = config["mcts_discount_factor"]
     lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
     uct_tradeoff = config["uct_tradeoff"]
+    # uct_tradeoff = max_ons
     pool_thread_count = config["pool_thread_count"]
     iter_limit = config["iter_limit"]
     allowed_computation_time = config["allowed_computation_time"]
@@ -354,51 +410,36 @@ def run_simulation(config, chain=None):
         config=config,
         travel_model=travel_model,
     )
-
-    import time
-
     start_time = time.time()
     score = simulator.run_simulation()
     print(score)
     elapsed = time.time() - start_time
-    # logger.info(f"Simulator run time: {elapsed:.2f} s")
+    csvlogger.info(f"Simulator run time: {elapsed:.2f} s")
     print(f"Simulator run time: {elapsed:.2f} s")
     return score
 
 
 if __name__ == "__main__":
-    config = {
-        "starting_date_str": "20221005",
-        "real_world_dir": "REALWORLD_ENV",
-        "iter_limit": 1,
-        "pool_thread_count": 1,
-        "mcts_discount_factor": 0.99997,
-        "uct_tradeoff": 416777,
-        "lookahead_horizon_delta_t": 3600,
-        "rollout_horizon_delta_t": 3600,
-        "allowed_computation_time": 15,
-        "vehicle_count": "10",
-        "oracle": True,
-        "method": "baseline",
-        "use_intervals": True,
-        "use_timepoints": True,
-        "save_metrics": False,
-        "send_mail": False,
-        "reallocation": True,
-        "early_end": False,
-        "scenario": "1B",
-        "mcts_log_name": "test",
-        "overload_start_depots": {"41": "MCC", "42": "MCC"},
-    }
+    # Create the ArgumentParser object
+    parser = argparse.ArgumentParser(description="Stationing and dispatch executor.")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--log_level", type=str, default="DEBUG")
+    parser.add_argument("-c", "--config", type=str, default="configs/test")
+    args = parser.parse_args()
+    args = namespace_to_dict(args)
+
+    config_path = f'{args["config"]}.json'
+    with open(config_path) as f:
+        config = json.load(f)
 
     _dir = "."
-    filename = "MCTS"
+    filename = config["mcts_log_name"]
     exp_log_path = f"{_dir}/logs/{config['starting_date_str']}_{filename}"
     exp_res_path = f"{_dir}/results/{config['starting_date_str']}_{filename}"
     Path(exp_log_path).mkdir(parents=True, exist_ok=True)
     Path(exp_res_path).mkdir(parents=True, exist_ok=True)
 
-    logFormatter = logging.Formatter("[%(asctime)s][%(levelname)s][%(lineno)d] %(message)s", "%m-%d %H:%M:%S")
+    logFormatter = logging.Formatter("[%(asctime)s][%(levelname)-.1s] %(message)s", "%m-%d %H:%M:%S")
     logger = logging.getLogger("debuglogger")
     logger.setLevel(logging.DEBUG)
 
@@ -425,5 +466,8 @@ if __name__ == "__main__":
     # logger.addHandler(streamHandler)
 
     logger.debug("Starting process.")
-    print(config.get("pool_thread_count", 0))
+    logger.debug(f"pool_thread_count: {config.get('pool_thread_count', 0)}")
     run_simulation(config, chain=config.get("pool_thread_count", 0))
+
+    if config.get("send_mail", False):
+        emailer(config)

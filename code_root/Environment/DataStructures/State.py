@@ -4,5 +4,6 @@ class State:
         self.buses = buses
         self.bus_events = bus_events
         self.time = time
-        self.trips_with_px_left = {}
+        self.people_left_behind = []
         self.served_trips = []
+        self.stop_chains = []

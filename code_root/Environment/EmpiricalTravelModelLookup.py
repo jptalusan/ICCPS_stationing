@@ -181,23 +181,6 @@ class EmpiricalTravelModelLookup:
             tt_factor = 1.0
             return 60 * tt_factor, 0.5
 
-    def get_last_arrival_event(self, state):
-        trips = []
-        for bus_id, bus_obj in state.buses.items():
-            for block_trip in bus_obj.bus_block_trips:
-                trips.append(block_trip[1])
-
-        last_trip_arrival = dt.datetime(year=2000, month=1, day=1, hour=0, minute=0, second=0)
-        for trip in trips:
-            trip_data = self.trip_plan[trip]
-            lta = trip_data["scheduled_time"][-1]
-            lta = str_timestamp_to_datetime(lta)
-
-            if lta >= last_trip_arrival:
-                last_trip_arrival = lta
-
-        return last_trip_arrival
-
     def is_bus_at_last_stop(self, current_stop, trip):
         trip_data = self.trip_plan[trip]
         last_stop_id = trip_data["last_stop_id"]

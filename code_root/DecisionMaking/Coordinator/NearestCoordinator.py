@@ -21,6 +21,8 @@ class NearestCoordinator:
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
+            if bus_obj.type == BusType.REGULAR:
+                continue
             if (bus_obj.type == BusType.OVERLOAD) and (
                 (bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)
             ):
@@ -40,36 +42,33 @@ class NearestCoordinator:
 
         # TODO Should we also consider all future stops in the trip?
         elif action_type == ActionType.OVERLOAD_DISPATCH:
-            VEHICLE_CAPACITY = 40
-            OVERAGE_THRESHOLD = 0.05
             # TODO: Check if passengers left behind is >= 5% of the vehicle capacity
             pass
             stops_with_left_behind_passengers = []
             candidate_stops = []
-            for stop_id, stop_obj in state.stops.items():
-                passenger_set_counts = stop_obj.passenger_waiting_dict_list
-                for p_set in passenger_set_counts:
-                    if p_set.get("left", False):
-                        remaining_passengers = p_set["ons"]
-                        if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
-                            arrival_time = p_set["arrival_time"]
-                            current_stop_number = p_set["stop_sequence"]
-                            block_id = p_set["block_id"]
-                            trip_id = p_set["trip_id"]
-                            route_id_dir = p_set["route_id_dir"]
-                            block_trip = (block_id, str(trip_id))
-                            if block_trip in state.served_trips:
-                                continue
-                            stops_with_left_behind_passengers.append(
-                                (
-                                    stop_id,
-                                    current_stop_number,
-                                    arrival_time,
-                                    remaining_passengers,
-                                    block_trip,
-                                    route_id_dir,
-                                )
+            for p_set in state.people_left_behind:
+                if p_set.get("left_behind", False):
+                    remaining_passengers = p_set["ons"]
+                    if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
+                        arrival_time = p_set["arrival_time"]
+                        current_stop_number = p_set["stop_sequence"]
+                        block_id = p_set["block_id"]
+                        trip_id = p_set["trip_id"]
+                        stop_id = p_set["stop_id"]
+                        block_trip = (block_id, str(trip_id))
+                        if block_trip in state.served_trips:
+                            continue
+                        route_id_dir = p_set["route_id_dir"]
+                        stops_with_left_behind_passengers.append(
+                            (
+                                stop_id,
+                                current_stop_number,
+                                arrival_time,
+                                remaining_passengers,
+                                block_trip,
+                                route_id_dir,
                             )
+                        )
 
             _valid_actions = [[ActionType.OVERLOAD_DISPATCH], idle_overload_buses, stops_with_left_behind_passengers]
             _valid_actions = list(itertools.product(*_valid_actions))

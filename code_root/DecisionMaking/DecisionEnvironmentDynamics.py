@@ -24,17 +24,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
         self.travel_model = travel_model
         self.config = config
 
-    def get_trips_with_remaining_passengers(self, state, limit=None):
-        trips_with_remaining = sorted(state.trips_with_px_left, key=state.trips_with_px_left.get, reverse=True)
-        if limit:
-            trips_with_remaining = trips_with_remaining[0 : limit - 1]
-        trips_with_remaining = [i for i in trips_with_remaining if i]
-        return trips_with_remaining
-
     def generate_possible_actions(self, state, event, action_type=ActionType.OVERLOAD_ALL):
         # Find idle overload buses
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
+            if bus_obj.type == BusType.REGULAR:
+                continue
             if (bus_obj.type == BusType.OVERLOAD) and (
                 (bus_obj.status == BusStatus.IDLE) or (bus_obj.status == BusStatus.ALLOCATION)
             ):
@@ -63,25 +58,41 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 or event.event_type == EventType.PASSENGER_LEFT_BEHIND
             ):
                 bus_id = event.type_specific_information["bus_id"]
+                # Get current trip
                 if state.buses[bus_id].type != BusType.OVERLOAD and state.buses[bus_id].status == BusStatus.IN_TRANSIT:
-                    trips_with_remaining = self.get_trips_with_remaining_passengers(state)
-
                     stops_with_left_behind_passengers = []
-                    trips_dispatched_to = []
-                    for current_block_trip, passenger_arrival_time, stop_id, stop_no in trips_with_remaining:
-                        if passenger_arrival_time <= state.time:
-                            if current_block_trip in state.served_trips:
-                                continue
-                            if current_block_trip not in trips_dispatched_to:
-                                trips_dispatched_to.append(current_block_trip)
-                                remain = state.trips_with_px_left[
-                                    (current_block_trip, passenger_arrival_time, stop_id, stop_no)
-                                ]
+                    candidate_stops = []
+                    # for stop_id, stop_obj in state.stops.items():
+                    for p_set in state.people_left_behind:
+                        if p_set.get("left_behind", False):
+                            remaining_passengers = p_set["ons"]
+                            if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
+                                arrival_time = p_set["arrival_time"]
+                                current_stop_number = p_set["stop_sequence"]
+                                block_id = p_set["block_id"]
+                                trip_id = p_set["trip_id"]
+                                stop_id = p_set["stop_id"]
+                                block_trip = (block_id, str(trip_id))
+                                # Only consider actions for trip of the current bus?
+                                if block_trip in state.served_trips:
+                                    continue
+                                route_id_dir = p_set["route_id_dir"]
                                 stops_with_left_behind_passengers.append(
-                                    (stop_id, stop_no, passenger_arrival_time, remain, current_block_trip)
+                                    (
+                                        stop_id,
+                                        current_stop_number,
+                                        arrival_time,
+                                        remaining_passengers,
+                                        block_trip,
+                                        route_id_dir,
+                                    )
                                 )
 
-                    _valid_actions = [[ActionType.OVERLOAD_DISPATCH], ["41"], stops_with_left_behind_passengers]
+                    _valid_actions = [
+                        [ActionType.OVERLOAD_DISPATCH],
+                        idle_overload_buses,
+                        stops_with_left_behind_passengers,
+                    ]
                     _valid_actions = list(itertools.product(*_valid_actions))
                     valid_actions.extend(_valid_actions)
 
@@ -138,7 +149,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             return []
 
         # Based on k-means clustering of disruption events and finding the center most stop from that cluster's envelope
-        valid_stops = ["MTA", "MCC5_1", "NOLTAYSN", "DWMRT", "WHICHASF"]
+        # TODO Expand this to 25
+        valid_stops = ["MTA", "MCC", "NOLTAYSN", "DWMRT", "WHICHASF"]
 
         idle_overload_buses = []
         for bus_id, bus_obj in state.buses.items():
@@ -187,8 +199,10 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(
                     current_block_trip, ofb_obj.current_stop, stop_no, state.time
                 )
+                route_id_direction = self.travel_model.get_route_id_direction(current_block_trip)
                 ofb_obj.total_deadkms_moved += distance
-                log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
+                ofb_obj.total_deadsecs_moved += travel_time
+                # log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
 
                 time_of_activation = state.time
                 time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
@@ -204,17 +218,20 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                         "bus_id": ofb_id,
                         "current_block_trip": current_block_trip,
                         "stop": state.buses[ofb_id].current_stop_number,
+                        "stop_id": stop_id,
+                        "route_id_direction": route_id_direction,
+                        "action": ActionType.OVERLOAD_DISPATCH,
                     },
                 )
 
                 new_events.append(event)
 
-                log(
-                    self.logger,
-                    state.time,
-                    f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
-                    LogType.ERROR,
-                )
+                # log(
+                #     self.logger,
+                #     state.time,
+                #     f"Dispatching overflow bus {ofb_id} from {ofb_obj.current_stop} @ stop {stop_id}",
+                #     LogType.ERROR,
+                # )
 
                 state.served_trips.append(current_block_trip)
             ##### END NEW
@@ -240,44 +257,57 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             else:
                 ofb_obj.current_stop_number = stop_no - 1
 
-            ofb_obj.t_state_change = state.time
             ofb_obj.status = BusStatus.IN_TRANSIT
 
-            # Switch passengers
-            if copy.copy(broken_bus_obj.current_load) >= ofb_obj.capacity:
-                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load) - ofb_obj.capacity
-            else:
-                ofb_obj.current_load = copy.copy(broken_bus_obj.current_load)
-            ofb_obj.total_passengers_served += ofb_obj.current_load
-
             # Deactivate broken_bus_obj
-            broken_bus_obj.current_load = 0
             broken_bus_obj.current_block_trip = None
             broken_bus_obj.bus_block_trips = []
-            broken_bus_obj.total_passengers_served -= ofb_obj.current_load
+            broken_bus_obj.total_passengers_served -= broken_bus_obj.current_load
+            broken_bus_obj.current_load = 0
 
             ofb_obj.current_block_trip = ofb_obj.bus_block_trips.pop(0)
+
+            # TODO: It should just compute the time it takes from where it is right now, to go to the last passed stop of the broken bus.
+            broken_bus_last_passed_stop = broken_bus_obj.current_stop
+            current_overload_bus_stop = ofb_obj.current_stop
+
+            travel_time, distance = self.travel_model.get_traveltime_distance_from_stops(
+                current_overload_bus_stop, broken_bus_last_passed_stop, state.time
+            )
+            ofb_obj.total_deadkms_moved += distance
+            ofb_obj.total_deadsecs_moved += travel_time
+            route_id_direction = self.travel_model.get_route_id_direction(ofb_obj.current_block_trip)
+
+            # In case it arrives earlier than scheduled time (it should wait?)
             scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(
                 ofb_obj.current_block_trip, ofb_obj.current_stop_number
             )
-
-            travel_time, distance = self.travel_model.get_traveltime_distance_from_depot(
-                ofb_obj.current_block_trip, ofb_obj.current_stop, ofb_obj.current_stop_number, state.time
-            )
-            ofb_obj.total_deadkms_moved += distance
-            log(self.logger, state.time, f"Bus {ofb_id} moves {distance:.2f} deadkms.", LogType.DEBUG)
-
             time_of_activation = state.time
             time_to_state_change = time_of_activation + dt.timedelta(seconds=travel_time)
+            # HACK kind of.
             time_to_state_change = max(time_to_state_change, scheduled_arrival_time)
 
             event = Event(
                 event_type=EventType.VEHICLE_ARRIVE_AT_STOP,
                 time=time_to_state_change,
-                type_specific_information={"bus_id": ofb_id, "action": ActionType.OVERLOAD_TO_BROKEN},
+                type_specific_information={
+                    "bus_id": ofb_id,
+                    "current_block_trip": ofb_obj.current_block_trip,
+                    "stop": ofb_obj.current_stop_number,
+                    "stop_id": broken_bus_last_passed_stop,
+                    "route_id_direction": route_id_direction,
+                    "action": ActionType.OVERLOAD_TO_BROKEN,
+                },
             )
 
             new_events.append(event)
+
+            log(
+                self.csvlogger,
+                state.time,
+                f"Sending takeover overflow bus {ofb_id} from {ofb_obj.current_stop} to stop {broken_bus_obj.current_stop}",
+                LogType.ERROR,
+            )
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             ofb_obj = state.buses[ofb_id]

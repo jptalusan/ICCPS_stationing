@@ -23,7 +23,6 @@ class ModularMCTS:
         exploit_explore_tradoff_param,
         action_type,
     ):
-        self.passenger_arrival_distribution = None
         self.allowed_computation_time = allowed_computation_time
         self.rollout_policy = rollout_policy
         self.iter_limit = iter_limit
@@ -48,14 +47,14 @@ class ModularMCTS:
 
         # self.logger = LogInit(pathName="logs/monday.log", console=False, colors=False)
 
-    def solve(self, state, starting_event_queue, passenger_arrival_distribution):
-        state = copy.deepcopy(state)
-        self.solve_start_time = state.time
+    # TODO load the passengers to state either here or before i call solve
+    def solve(self, state, starting_event_queue):
+        _state = copy.deepcopy(state)
+        self.solve_start_time = _state.time
         self.number_of_nodes = 0
-        self.passenger_arrival_distribution = passenger_arrival_distribution
 
         possible_actions, actions_taken_tracker = self.get_possible_actions(
-            state, starting_event_queue[0], self.action_type
+            _state, starting_event_queue[0], self.action_type
         )
 
         # TODO: If there is only 1 possible action (NO_OP) don't do MCTS anymore.
@@ -75,7 +74,7 @@ class ModularMCTS:
 
         # init tree
         root = TreeNode(
-            state=state,
+            state=_state,
             parent=None,
             depth=0,
             is_terminal=_root_is_terminal,
@@ -198,11 +197,7 @@ class ModularMCTS:
         # Simulation/Rollout
         rollout_start = time.time()
         score = self.rollout_policy.rollout(
-            new_node,
-            self.mdp_environment_model,
-            self.discount_factor,
-            self.solve_start_time,
-            self.passenger_arrival_distribution,
+            new_node, self.mdp_environment_model, self.discount_factor, self.solve_start_time
         )
 
         self.time_tracker["rollout"] += time.time() - rollout_start
@@ -294,7 +289,7 @@ class ModularMCTS:
         """
         Moves the state forward in time.
         """
-        new_events = self.mdp_environment_model.update(state, event, self.passenger_arrival_distribution)
+        new_events = self.mdp_environment_model.update(state, event, should_log=False)
         return new_events
 
     def add_event_to_event_queue(self, queue, events):
@@ -351,9 +346,9 @@ class ModularMCTS:
         # self.logger.debug(f"{exploit:.2f},{explore:.2f}")
 
         # for positive params (reward, served)
-        scaled_explore_2 = -1 * self.exploit_explore_tradoff_param * explore
+        # scaled_explore_2 = -1 * self.exploit_explore_tradoff_param * explore
         # for negative params (cost, remain)
-        # scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
+        scaled_explore_2 = abs(self.exploit_explore_tradoff_param) * explore
 
         score = exploit + scaled_explore_2
         # score = exploit + explore

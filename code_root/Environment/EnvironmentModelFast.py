@@ -15,8 +15,9 @@ class EnvironmentModelFast:
         self.logger = logging.getLogger("debuglogger")
         self.config = config
         self.dispatch_policy = HeuristicDispatch(travel_model)
+        self.update_timer = 0
 
-    def update(self, state, curr_event):
+    def update(self, state, curr_event, should_log=False):
         """
         Updates the state to the given time. This is mostly updating the responders
         :param state:
@@ -40,7 +41,6 @@ class EnvironmentModelFast:
 
         new_events = []
         if curr_event.event_type == EventType.PASSENGER_ARRIVE_STOP:
-            self.handle_passenger_arrival(curr_event=curr_event, state=state)
             pass
 
         # Buses should transfer their passengers as waiting to the nearest(?) stop as a new entry to passenger_waiting_dict_list
@@ -87,7 +87,7 @@ class EnvironmentModelFast:
                 state.buses[bus_id].current_stop = current_stop_id
 
                 if current_stop_number >= 0:
-                    pickup_events = self.handle_bus_arrival(curr_event, state)
+                    pickup_events = self.handle_bus_arrival(curr_event, state, should_log)
                     new_events.extend(pickup_events)
 
                 # No next stop but maybe has next trips? (will check in idle_update)
@@ -207,6 +207,8 @@ class EnvironmentModelFast:
 
         # Loop through all OVERLOAD buses
         for bus_id, bus_obj in state.buses.items():
+            if BusType.REGULAR:
+                continue
             if (BusType.OVERLOAD == bus_obj.type) and (BusStatus.ALLOCATION == bus_obj.status):
                 time_at_last_stop = bus_obj.time_at_last_stop
                 t_state_change = bus_obj.t_state_change
@@ -244,37 +246,8 @@ class EnvironmentModelFast:
         state.time = new_time
         return new_events
 
-    def handle_passenger_arrival(self, curr_event, state):
-        type_specific_information = curr_event.type_specific_information
-        arrival_time = curr_event.time
-        trip_id = type_specific_information["trip_id"]
-        stop_id = type_specific_information["stop_id"]
-        block_id = type_specific_information["block_id"]
-        stop_sequence = type_specific_information["stop_sequence"]
-        route_id_dir = type_specific_information["route_id_dir"]
-        scheduled_time = type_specific_information["scheduled_time"]
-        ons = type_specific_information["ons"]
-        offs = type_specific_information["offs"]
-
-        stop = state.stops.get(stop_id, None)
-        if stop:
-            arrival_input = {
-                "route_id_dir": route_id_dir,
-                "block_id": block_id,
-                "trip_id": trip_id,
-                "stop_sequence": stop_sequence,
-                "scheduled_time": scheduled_time,
-                "arrival_time": arrival_time,
-                "ons": ons,
-                "offs": offs,
-            }
-            stop.passenger_waiting_dict_list.append(arrival_input)
-            pass
-        else:
-            # log(self.logger, state.time, f"Stop {stop_id} does not exist.", LogType.ERROR)
-            pass
-
-    def handle_bus_arrival(self, curr_event, state):
+    def handle_bus_arrival(self, curr_event, state, should_log=False):
+        new_events = []
         passenger_time_to_leave = self.config.get("passenger_time_to_leave_min", 30)
         type_specific_information = curr_event.type_specific_information
         arrival_time = curr_event.time
@@ -313,21 +286,7 @@ class EnvironmentModelFast:
         stop_object = state.stops[curr_stop]
         passenger_set_counts = stop_object.passenger_waiting_dict_list
 
-        new_events = []
-        # Removing masked data from dict_list
-        # MIGHT BE SLOW, usse filter then just loop to get the ons offs which is just a few rows
-        # https://stackoverflow.com/questions/38865201/most-efficient-way-to-search-in-list-of-dicts
-        # https://stackoverflow.com/questions/53836295/find-an-item-inside-a-list-of-dictionaries
-        # list(filter(lambda x: ((x['stop_id'] == '1SWOONM') & (x['sampled_loads'] == 29.0)), _dict))
-        # list(filter(lambda x: ((x['scheduled_time'] > pd.Timestamp('2022-10-24 06:15:00')) & (x['sampled_loads'] ==33.0)), _dict))
-
-        # wait_df = pd.DataFrame(passenger_set_counts, columns=['route_id_dir', 'block_id', 'stop_sequence', 'scheduled_time', 'arrival_time', 'ons', 'offs'])
-        # picked_df = wait_df.mask((wait_df['route_id_dir'] == curr_route_id_dir) & (wait_df['arrival_time'] <= arrival_time) & (wait_df['block_id'] == curr_block_id))
-        # updated_df = wait_df.merge(picked_df.drop_duplicates(), how='left', indicator=True)
-        # updated_df = updated_df[updated_df['_merge'] == 'left_only']
-        # updated_df = updated_df.drop('_merge', axis=1)
-        # stop_object.passenger_waiting_dict_list = updated_df.to_dict("records")
-
+        # This should take care of the chains by itself by limiting the passengers you get to some window.
         picked_list = list(
             filter(
                 lambda x: (
@@ -339,6 +298,17 @@ class EnvironmentModelFast:
                 passenger_set_counts,
             )
         )
+
+        pl, npl = self.get_remaining_passengers(
+            state=state,
+            arrival_time=arrival_time,
+            curr_stop=curr_stop,
+            curr_route_id_dir=curr_route_id_dir,
+            curr_block_id=curr_block_id,
+        )
+        state.people_left_behind = npl
+
+        picked_list.extend(pl)
 
         ons = 0
         offs = 0
@@ -377,6 +347,7 @@ class EnvironmentModelFast:
 
             # Append back to the passenger_waiting_dict_list with same arrival_time as bus arrival and count == remaining
             remaining_dict = {
+                "stop_id": curr_stop,
                 "route_id_dir": curr_route_id_dir,
                 "block_id": int(curr_block_id),
                 "trip_id": trip_id,
@@ -385,9 +356,9 @@ class EnvironmentModelFast:
                 "arrival_time": arrival_time,
                 "ons": remaining,
                 "offs": 0,
-                "left": True,
+                "left_behind": True,
             }
-            stop_object.passenger_waiting_dict_list.append(remaining_dict)
+            state.people_left_behind.append(remaining_dict)
             event = Event(
                 event_type=EventType.PASSENGER_LEFT_BEHIND,
                 time=arrival_time,
@@ -413,19 +384,23 @@ class EnvironmentModelFast:
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(curr_block_trip_id, current_stop_number)
 
         # if got_on_bus or offs:
-        log_str = f"""Bus {bus_id} on trip: {curr_trip_id} scheduled for {scheduled_arrival_time} \
+        if should_log and ((ons + offs + got_on_bus + remaining) > 0):
+            log_str = f"""Bus {bus_id} on trip: {curr_trip_id} scheduled for {scheduled_arrival_time.strftime('%H:%M:%S')} \
 arrives at {curr_stop}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
-        log(self.logger, state.time, log_str, LogType.INFO)
+            log(self.logger, state.time, log_str, LogType.INFO)
 
         # picked_list_str = ','.join([f"{p['arrival_time']}:{p['ons']}:{p['offs']}:{p['block_id']}" for p in passenger_df[mask]])
         # log(self.logger, state.time, f"Picked up {len(passenger_df[mask].index)} sets of passengers: {picked_list_str}.", LogType.DEBUG)
 
-        if remaining:
+        if should_log and remaining:
+            extra = ""
+            if (int(curr_block_id), curr_trip_id) in state.served_trips:
+                extra = ", already served."
             log(
                 self.logger,
                 state.time,
-                f"Bus {bus_id} on trip: {curr_trip_id} left {remaining} people at stop {curr_stop},{curr_block_id}",
+                f"Bus {bus_id} on trip: {curr_trip_id} left {remaining} people at stop {curr_stop},{curr_block_id}{extra}",
                 LogType.ERROR,
             )
 
@@ -445,6 +420,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
         curr_route_id_direction = self.travel_model.get_route_id_direction(current_block_trip)
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
         remaining_dict = {
+            "stop_id": stop_id,
             "route_id_dir": curr_route_id_direction,
             "block_id": int(current_block_trip[0]),
             "trip_id": int(current_block_trip[1]),
@@ -460,7 +436,40 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
         stop_obj.total_passenger_ons -= current_load
         return True
 
-    def take_action(self, state, action, baseline=False):
+    def get_remaining_passengers(self, state, arrival_time, curr_stop, curr_route_id_dir, curr_block_id):
+        passenger_time_to_leave = self.config.get("passenger_time_to_leave_min", 30)
+        passenger_set_counts = state.people_left_behind
+        picked_list = list(
+            filter(
+                lambda x: (
+                    (x["route_id_dir"] == curr_route_id_dir)
+                    & (x["stop_id"] == curr_stop)
+                    & (x["arrival_time"] <= arrival_time)
+                    & (x["arrival_time"] + pd.Timedelta(passenger_time_to_leave, unit="min") >= arrival_time)
+                    & (x["block_id"] == int(curr_block_id))
+                    & (x["left_behind"] == True)
+                ),
+                passenger_set_counts,
+            )
+        )
+
+        # Third condition will simulate people walking away after 30 minutes.
+        not_picked_list = list(
+            filter(
+                lambda x: (
+                    (x["route_id_dir"] != curr_route_id_dir)
+                    | (x["stop_id"] != curr_stop)
+                    | (x["arrival_time"] > arrival_time)
+                    | (x["arrival_time"] + pd.Timedelta(passenger_time_to_leave, unit="min") < arrival_time)
+                    | (x["block_id"] != int(curr_block_id))
+                ),
+                passenger_set_counts,
+            )
+        )
+
+        return picked_list, not_picked_list
+
+    def take_action(self, state, action):
         # print("take_action")
         action_type = action["type"]
         ofb_id = action["overload_bus"]
@@ -600,7 +609,7 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             new_events.append(event)
 
             log(
-                self.csvlogger,
+                self.logger,
                 state.time,
                 f"Sending takeover overflow bus {ofb_id} from {ofb_obj.current_stop} to stop {broken_bus_obj.current_stop}",
                 LogType.ERROR,
@@ -624,6 +633,13 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
             ofb_obj.distance_to_next_stop = distance_to_next_stop
             ofb_obj.time_at_last_stop = state.time
             ofb_obj.status = BusStatus.ALLOCATION
+
+            log(
+                self.logger,
+                state.time,
+                f"Reallocating overflow bus {ofb_id} from {current_stop} to stop {reallocation_stop}",
+                LogType.ERROR,
+            )
 
         elif ActionType.NO_ACTION == action_type:
             # Do nothing

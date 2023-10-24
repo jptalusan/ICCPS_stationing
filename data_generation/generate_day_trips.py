@@ -21,6 +21,7 @@ from pyspark.sql import functions as F
 import numpy as np
 import random
 import json
+import shutil
 import joblib
 import matplotlib as mpl
 import tensorflow as tf
@@ -699,6 +700,8 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
         df = df.rename({"block_abbr": "block_id", "stop_id_original": "stop_id"}, axis=1)
 
         if chain == 0:
+            # FIX arrival times equal to scheduled time when chains are not used.
+            df["arrival_time"] = df["scheduled_time"]
             df[out_columns].to_parquet(f'results/sampled_ons_offs_dict_{DATE.replace("-", "")}.parquet')
             pass
         else:
@@ -706,16 +709,27 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
             df[out_columns].to_parquet(
                 f'results/chains/{DATE.replace("-","")}/ons_offs_dict_chain_{DATE.replace("-","")}_{chain - 1}.parquet'
             )
+
         extra_label = reorganize_files(date=config["date"])
-        return extra_label
+        if config.get("arrival_noise", False):
+            if extra_label:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
+            else:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
+            logger.debug(f"Start to add noise for: {dir}")
+            add_noise_to_arrivals(dir=dir)
+
+        return True
 
 
 def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
     save_plans(trip_res_df=trip_res_df, config=config, DATE=DATE)
     noise_levels = config["noise_pct"]
 
+    logger.info(f"Number of noise levels: {len(noise_levels)}.")
     load_noise_range = 10
     for noise_level in noise_levels:
+        logger.info(f"Processing noise level {noise_level:.2f}.")
         noise_percentage = noise_level / 100
         # Add noise to the numeric column
 
@@ -766,6 +780,8 @@ def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
             ]
             df = df.rename({"block_abbr": "block_id", "stop_id_original": "stop_id"}, axis=1)
             if chain == 0:
+                # FIX arrival times equal to scheduled time when chains are not used.
+                df["arrival_time"] = df["scheduled_time"]
                 df[out_columns].to_parquet(f'{CURR_DIR}/results/sampled_ons_offs_dict_{DATE.replace("-", "")}.parquet')
                 logger.info(
                     f"Saving df to {CURR_DIR}/results/sampled_ons_offs_dict_noise_{noise_level}_{DATE.replace('-', '')}.parquet"
@@ -779,8 +795,15 @@ def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
                     f"Saving df to results/chains/{DATE.replace('-','')}/ons_offs_dict_noise_{noise_level}_chain_{DATE.replace('-','')}_{chain - 1}.parquet"
                 )
 
-        extra_label = reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
-        return extra_label
+            extra_label = reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
+            if config.get("arrival_noise", False):
+                if extra_label:
+                    dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
+                else:
+                    dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
+                logger.debug(f"Start to add noise for: {dir}")
+                add_noise_to_arrivals(dir=dir)
+    return True
 
 
 def reorganize_files(date, extra_label=None):
@@ -802,15 +825,16 @@ def reorganize_files(date, extra_label=None):
             f"{date_dir}/sampled_ons_offs_dict_{date_str}.parquet",
         )
     if os.path.isfile(f"results/trip_plan_{date_str}.json"):
-        os.rename(f"results/trip_plan_{date_str}.json", f"{date_dir}/trip_plan_{date_str}.json")
+        # os.rename(f"results/trip_plan_{date_str}.json", f"{date_dir}/trip_plan_{date_str}.json")
+        shutil.copy(f"results/trip_plan_{date_str}.json", f"{date_dir}/trip_plan_{date_str}.json")
 
     if config["limit_regular_bus_capacity"]:
-        os.rename(
+        shutil.copy(
             f"{CURR_DIR}/results/vehicle_plan_{date_str}_{config['capacities_of_regular_buses']}CAP.json",
             f"{date_dir}/vehicle_plan_{date_str}_{config['capacities_of_regular_buses']}CAP.json",
         )
     else:
-        os.rename(f"{CURR_DIR}/results/vehicle_plan_{date_str}.json", f"{date_dir}/vehicle_plan_{date_str}.json")
+        shutil.copy(f"{CURR_DIR}/results/vehicle_plan_{date_str}.json", f"{date_dir}/vehicle_plan_{date_str}.json")
 
     if os.path.exists(f"{chains_dir}/{date_str}"):
         os.rename(f"{chains_dir}/{date_str}", f"{date_dir}/chains")
@@ -841,15 +865,15 @@ def add_noise_to_arrivals(dir=None):
 
 # Setting noise_pct to 0 and chains to 0 will be equivalent to real_world.
 if __name__ == "__main__":
-    # _start_date = "2022-10-05"
-    # _end_date = "2022-10-15"
-    # date_range = pd.date_range(_start_date, _end_date, freq="1D")
+    _start_date = "2022-10-16"
+    _end_date = "2022-10-16"
+    date_range = pd.date_range(_start_date, _end_date, freq="1D")
     # date_range = random.sample(list(date_range), 100)
-    # date_range = [d.strftime("%Y-%m-%d") for d in date_range]
-    # print(len(date_range))
-    # print(date_range)
+    date_range = [d.strftime("%Y-%m-%d") for d in date_range]
+    print(len(date_range))
+    print(date_range)
     # date_range = ['2022-02-23', '2021-08-26', '2020-07-09', '2020-10-17', '2022-06-02', '2022-08-24', '2022-07-07', '2022-05-20', '2020-10-15', '2020-05-05', '2021-06-06', '2021-06-24', '2022-05-10', '2020-10-13', '2020-10-29', '2020-06-11', '2020-07-22', '2021-10-05', '2021-11-25', '2022-10-04', '2020-05-22', '2021-11-04']
-    date_range = ["2022-10-05"]
+    # date_range = ["2022-10-05"]
 
     # Date_range needs to be a list with elements in the format above STR "%Y-%m-%d"
     for d in date_range:
@@ -872,7 +896,7 @@ if __name__ == "__main__":
             "limit_service_hours_end_time": "06:00:00",
             "send_mail": False,
             "use_generative_models": False,
-            "noise_pct": [80],
+            "noise_pct": [1, 5, 10],
             "arrival_noise": True,
         }
 
@@ -897,15 +921,7 @@ if __name__ == "__main__":
             if config.get("use_generative_models", False):
                 extra_label = generate_traffic_data_for_date(df, config["date"], config, CHAINS)
             else:
-                extra_label = generate_noisy_data_for_date(df, config["date"], config, CHAINS)
-
-        if config.get("arrival_noise", False):
-            if extra_label:
-                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
-            else:
-                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
-            logger.debug(f"Start to add noise for: {dir}")
-            add_noise_to_arrivals(dir=dir)
+                res = generate_noisy_data_for_date(df, config["date"], config, CHAINS)
 
         elapsed = time.time() - start_time
         if config["send_mail"]:

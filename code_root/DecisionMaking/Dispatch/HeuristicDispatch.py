@@ -8,6 +8,7 @@ class HeuristicDispatch:
     def __init__(self, travel_model) -> None:
         self.travel_model = travel_model
 
+    # Plan is to check which stop to actually send the bus to.
     def select_overload_to_dispatch(self, state, action, baseline=False):
         if action["type"] != ActionType.OVERLOAD_DISPATCH:
             return None
@@ -32,6 +33,8 @@ class HeuristicDispatch:
         max_remain_arrival_time = None
 
         for stop_id in past_stops:
+            if "MCC" in stop_id[0:3]:
+                stop_id = "MCC"
             stop_obj = state.stops[stop_id]
             passenger_waiting = stop_obj.passenger_waiting
             if not passenger_waiting:
