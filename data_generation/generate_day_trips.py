@@ -22,6 +22,7 @@ import numpy as np
 import random
 import json
 import shutil
+import argparse
 import joblib
 import matplotlib as mpl
 import tensorflow as tf
@@ -569,7 +570,7 @@ def save_plans(trip_res_df, config, DATE):
 
     with open(f'results/trip_plan_{DATE.replace("-", "")}.json', "w") as fp:
         json.dump(overall_trip_plan, fp, sort_keys=True, indent=2)
-        logger.info(f"Saved trip json to {fp}")
+        logger.info(f'Saved trip json to results/trip_plan_{DATE.replace("-", "")}.json')
 
 
 def generate_traffic_data_for_date(df, DATE, config, CHAINS):
@@ -719,7 +720,7 @@ def generate_traffic_data_for_date(df, DATE, config, CHAINS):
             logger.debug(f"Start to add noise for: {dir}")
             add_noise_to_arrivals(dir=dir)
 
-        return True
+    return True
 
 
 def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
@@ -795,14 +796,14 @@ def generate_noisy_data_for_date(trip_res_df, DATE, config, CHAINS):
                     f"Saving df to results/chains/{DATE.replace('-','')}/ons_offs_dict_noise_{noise_level}_chain_{DATE.replace('-','')}_{chain - 1}.parquet"
                 )
 
-            extra_label = reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
-            if config.get("arrival_noise", False):
-                if extra_label:
-                    dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
-                else:
-                    dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
-                logger.debug(f"Start to add noise for: {dir}")
-                add_noise_to_arrivals(dir=dir)
+        extra_label = reorganize_files(date=config["date"], extra_label=f"noise_{noise_level}")
+        if config.get("arrival_noise", False):
+            if extra_label:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}_{extra_label}"
+            else:
+                dir = f"{CURR_DIR}/results/test_data/{config['date'].replace('-','')}"
+            logger.debug(f"Start to add noise for: {dir}")
+            add_noise_to_arrivals(dir=dir)
     return True
 
 
@@ -810,6 +811,8 @@ def reorganize_files(date, extra_label=None):
     # Reorganize files after generation
     logger.info("Reorganizing files.")
     chains_dir = f"{CURR_DIR}/results/chains"
+    Path(chains_dir).mkdir(parents=True, exist_ok=True)
+
     results_dir = f"{CURR_DIR}/results/test_data"
     date_str = date.replace("-", "")
     if extra_label:
@@ -836,8 +839,18 @@ def reorganize_files(date, extra_label=None):
     else:
         shutil.copy(f"{CURR_DIR}/results/vehicle_plan_{date_str}.json", f"{date_dir}/vehicle_plan_{date_str}.json")
 
-    if os.path.exists(f"{chains_dir}/{date_str}"):
-        os.rename(f"{chains_dir}/{date_str}", f"{date_dir}/chains")
+    # if os.path.exists(f"{chains_dir}/{date_str}"):
+    #     os.rename(f"{chains_dir}/{date_str}", f"{date_dir}/chains")
+
+    source_dir = f"{chains_dir}/{date_str}"
+    target_dir = f"{date_dir}/chains/"
+    Path(target_dir).mkdir(parents=True, exist_ok=True)
+
+    if os.path.isdir(source_dir):
+        file_names = os.listdir(source_dir)
+
+        for file_name in file_names:
+            shutil.move(os.path.join(source_dir, file_name), target_dir)
 
     return extra_label
 
@@ -863,42 +876,58 @@ def add_noise_to_arrivals(dir=None):
     logger.info("Finished randomizing arrival times.")
 
 
+def namespace_to_dict(namespace):
+    return {k: namespace_to_dict(v) if isinstance(v, argparse.Namespace) else v for k, v in vars(namespace).items()}
+
+
 # Setting noise_pct to 0 and chains to 0 will be equivalent to real_world.
+# noise_pct is for the load not arrival.
 if __name__ == "__main__":
-    _start_date = "2022-10-16"
-    _end_date = "2022-10-16"
+    print(os.getcwd())
+    # Create the ArgumentParser object
+    parser = argparse.ArgumentParser(description="Stationing and dispatch executor.")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--log_level", type=str, default="DEBUG")
+    parser.add_argument("-c", "--config", type=str, default="configs/test")
+    args = parser.parse_args()
+    args = namespace_to_dict(args)
+
+    config_path = f'{args["config"]}.json'
+    with open(config_path) as f:
+        c = json.load(f)
+
+        # config = {
+        #     "number_of_overload_buses": 5,
+        #     "capacities_of_overload_buses": 55,
+        #     "limit_regular_bus_capacity": False,
+        #     "capacities_of_regular_buses": 40,
+        #     "is_date_range": False,
+        #     "date": d,
+        #     "start_date": "2022-10-01",
+        #     "end_date": "2022-10-31",
+        #     "frequency_h": 24,
+        #     "chains": 50,
+        #     "limit_service_hours": False,
+        #     "limit_service_hours_start_time": "03:00:00",
+        #     "limit_service_hours_end_time": "06:00:00",
+        #     "send_mail": True,
+        #     "use_generative_models": False,
+        #     "noise_pct": [1, 5, 10],
+        #     "arrival_noise": True,
+        # }
+
+    _start_date = c.get("start_date", "2022-10-01")
+    _end_date = c.get("end_date", "2022-10-01")
     date_range = pd.date_range(_start_date, _end_date, freq="1D")
-    # date_range = random.sample(list(date_range), 100)
     date_range = [d.strftime("%Y-%m-%d") for d in date_range]
-    print(len(date_range))
-    print(date_range)
-    # date_range = ['2022-02-23', '2021-08-26', '2020-07-09', '2020-10-17', '2022-06-02', '2022-08-24', '2022-07-07', '2022-05-20', '2020-10-15', '2020-05-05', '2021-06-06', '2021-06-24', '2022-05-10', '2020-10-13', '2020-10-29', '2020-06-11', '2020-07-22', '2021-10-05', '2021-11-25', '2022-10-04', '2020-05-22', '2021-11-04']
-    # date_range = ["2022-10-05"]
 
     # Date_range needs to be a list with elements in the format above STR "%Y-%m-%d"
     for d in date_range:
         start_time = time.time()
         logger.info(f"Generating data for {d}.")
+        config = deepcopy(c)
+        config["date"] = d
         # chains should be 1 .. N
-        config = {
-            "number_of_overload_buses": 5,
-            "capacities_of_overload_buses": 55,
-            "limit_regular_bus_capacity": False,
-            "capacities_of_regular_buses": 40,
-            "is_date_range": False,
-            "date": d,
-            "start_date": "2022-10-01",
-            "end_date": "2022-10-31",
-            "frequency_h": 24,
-            "chains": 2,
-            "limit_service_hours": False,
-            "limit_service_hours_start_time": "03:00:00",
-            "limit_service_hours_end_time": "06:00:00",
-            "send_mail": False,
-            "use_generative_models": False,
-            "noise_pct": [1, 5, 10],
-            "arrival_noise": True,
-        }
 
         logger.info(f"Config: {config}")
         CHAINS = config["chains"]
@@ -926,7 +955,7 @@ if __name__ == "__main__":
         elapsed = time.time() - start_time
         if config["send_mail"]:
             try:
-                send_email("GENERATE_DAY_TRIPS", f"Done in: {elapsed} seconds.")
+                send_email(f"GENERATE_DAY_TRIPS: {d}", f"Done in: {elapsed} seconds.")
             except:
                 pass
 

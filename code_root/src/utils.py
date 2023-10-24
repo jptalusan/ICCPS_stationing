@@ -87,9 +87,9 @@ def get_tod(timestamp):
 
 
 import os
-from pathlib import Path
 import argparse
 import tarfile
+import json
 
 # Import smtplib for the actual sending function.
 import smtplib
@@ -97,10 +97,9 @@ from datetime import datetime
 
 # Here are the email package modules we'll need.
 from email.message import EmailMessage
-import re
 
 
-def emailer(config):
+def emailer(config_path):
     # Create the container email message.
     msg = EmailMessage()
     msg["Subject"] = "MCTS Stationing finished"
@@ -115,12 +114,17 @@ def emailer(config):
 
     now = datetime.now()
     log_name = now.strftime("%Y-%m-%d")
+
+    with open(config_path) as f:
+        config = json.load(f)
+
     output_tar_file = f"MCTS {config.get('starting_date_str', log_name)}.tar.gz"
 
     log_path = f"./results/{config['starting_date_str']}_{config['mcts_log_name']}/results.csv"
 
     with tarfile.open(output_tar_file, "w:gz") as tar:
         tar.add(log_path, arcname=os.path.basename(log_path))
+        tar.add(config_path, arcname=os.path.basename(config_path))
 
     for file in [output_tar_file]:
         filename = os.path.basename(os.path.normpath(file))

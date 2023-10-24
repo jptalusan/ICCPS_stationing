@@ -461,8 +461,8 @@ if __name__ == "__main__":
     streamHandler.setFormatter(logFormatter)
     streamHandler.setLevel(logging.DEBUG)
 
-    logger.addHandler(fileHandler)
-    # logger.addHandler(logging.NullHandler())
+    # logger.addHandler(fileHandler)
+    logger.addHandler(logging.NullHandler())
     # logger.addHandler(streamHandler)
 
     logger.debug("Starting process.")
@@ -470,4 +470,4 @@ if __name__ == "__main__":
     run_simulation(config, chain=config.get("pool_thread_count", 0))
 
     if config.get("send_mail", False):
-        emailer(config)
+        emailer(config_path)
