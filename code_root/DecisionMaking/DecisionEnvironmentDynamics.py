@@ -61,8 +61,6 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 # Get current trip
                 if state.buses[bus_id].type != BusType.OVERLOAD and state.buses[bus_id].status == BusStatus.IN_TRANSIT:
                     stops_with_left_behind_passengers = []
-                    candidate_stops = []
-                    # for stop_id, stop_obj in state.stops.items():
                     for p_set in state.people_left_behind:
                         if p_set.get("left_behind", False):
                             remaining_passengers = p_set["ons"]
@@ -102,7 +100,8 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
                 # Without checking if a broken bus has already been covered, we try to cover it again
                 # Leading to null values
                 if bus_obj.current_block_trip is not None:
-                    broken_buses.append(bus_id)
+                    if state.time <= (bus_obj.time_at_last_stop + pd.Timedelta(PASSENGER_TIME_TO_LEAVE, unit="min")):
+                        broken_buses.append(bus_id)
 
         if len(broken_buses) > 0:
             _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
@@ -119,7 +118,7 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
             # No action
             valid_actions = [do_nothing_action]
 
-        # Constraint on broken bus
+        # Constraint on broken bus (broken buses should be serviced immediately if possible)
         if len(broken_buses) > 0:
             # if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
             constrained_combo_actions = []
@@ -302,12 +301,12 @@ class DecisionEnvironmentDynamics(EnvironmentModelFast):
 
             new_events.append(event)
 
-            log(
-                self.csvlogger,
-                state.time,
-                f"Sending takeover overflow bus {ofb_id} from {ofb_obj.current_stop} to stop {broken_bus_obj.current_stop}",
-                LogType.ERROR,
-            )
+            # log(
+            #     self.logger,
+            #     state.time,
+            #     f"[SIM] Sending takeover overflow bus {ofb_id} from {ofb_obj.current_stop} to stop {broken_bus_obj.current_stop} {broken_bus_id}",
+            #     LogType.ERROR,
+            # )
 
         elif ActionType.OVERLOAD_ALLOCATE == action_type:
             ofb_obj = state.buses[ofb_id]

@@ -22,6 +22,7 @@ from src.utils import *
 import copy
 import time
 import logging
+import dateparser
 import argparse
 import json
 import pickle
@@ -94,7 +95,7 @@ def load_initial_state(starting_date, bus_plan, trip_plan, config, random_seed=1
     return Buses, Stops, active_stops
 
 
-def load_events(REALWORLD_DIR, travel_model, starting_date, Buses, Stops, trip_plan, event_file="", random_seed=100):
+def load_events(travel_model, starting_date, Buses, trip_plan, event_file="", random_seed=100):
     datetime_str = dt.datetime.strptime(starting_date, "%Y%m%d")
     # print("Adding events...")
     np.random.seed(random_seed)
@@ -168,61 +169,50 @@ def load_events(REALWORLD_DIR, travel_model, starting_date, Buses, Stops, trip_p
 
 
 # TODO: Double check if all vehicles are there.
-def manually_insert_disruption(events, buses, bus_id, time):
+def manually_insert_disruption(buses, bus_id, time):
     if bus_id not in list(buses.keys()):
         # raise "Bus does not exist."
-        return events
+        return None
 
     # If overload bus, don't add
     if buses[bus_id].type == BusType.OVERLOAD:
-        return events
-
-    start_time = events[0].time
-    end_time = events[-1].time
-
-    # if time < start_time or time > end_time:
-    #     raise "Time beyond limits."
-
-    if time < start_time:
-        print(f"Chosen time is in the past, {time} < {start_time}")
-        return events
-        # raise "Chosen time is in the past."
-
+        return None
     event = Event(event_type=EventType.VEHICLE_BREAKDOWN, time=time, type_specific_information={"bus_id": bus_id})
-    events.append(event)
-    events.sort(key=lambda x: x.time, reverse=False)
-    return events
+    return event
 
 
 # TODO: Fix config json to add CHAIN_DIR
 # Only load passenger events which will be visited by buses (to keep it fair)
 # passenger_waiting_dict_list should be a 2D list (one list per chain) then just use the chain required.
 # first element should be the real world. But what a
-def load_passengers_events(Stops, active_stops, REALWORLD_DIR, starting_date_str, chain=None, active_trips=[]):
+def load_passengers_events(Stops, active_stops, config, active_trips=[]):
+    chain = config.get("pool_thread_count", 0)
+    starting_date_str = config["starting_date_str"]
+    noise_label = str(config.get("noise_level", ""))
+    if noise_label:
+        REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}_noise_{noise_label}'
+    else:
+        REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}'
     print(f"Start passenger data load.")
     start = time.time()
     list_of_stops = []
     all_ons = []
-    for c in range(chain):
+    # Chain + 1 so that the first chain belongs to the "real-world" chain
+    for c in range(chain + 1):
         _stops = copy.deepcopy(Stops)
         # HACK Switched df for testing
         if not c:
-            df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}_FIX.parquet")
+            df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}.parquet")
             print("Using initial chain.")
         else:
-            df = pd.read_parquet(
-                f"{BASE_DIR}/scenarios/DISRUPTION_CHAINS/{starting_date_str}/chains/ons_offs_dict_chain_{starting_date_str}_{chain - 1}.parquet"
-            )
+            df = pd.read_parquet(f"{REALWORLD_DIR}/chains/ons_offs_dict_chain_{starting_date_str}_{chain - 1}.parquet")
+
             print("Using chains")
         df["stop_id"] = np.where(df["stop_id"].str.startswith("MCC"), "MCC", df["stop_id"])
         df = df[df["stop_id"].isin(active_stops)]
         df = df[df["trip_id"].isin(active_trips)]
 
         # df = df[(df["ons"] > 0) | (df["offs"] > 0)]
-        # Use np.where to apply the conversion condition
-        # TODO Problem is in all chains, not all steps are present, need to get superset.
-        # FIX is to just check if chain exists on handle passenger arrival()..
-        print("MCC" in df.stop_id.unique().tolist())
         df = df.drop(columns=["sampled_loads", "next_load"], errors="ignore")
         all_ons.append(df["ons"].sum())
         for stop_id, stop_df in df.groupby("stop_id"):
@@ -233,8 +223,7 @@ def load_passengers_events(Stops, active_stops, REALWORLD_DIR, starting_date_str
         list_of_stops.append(_stops)
     elapsed = time.time() - start
     print(f"Done loading in {elapsed:0f} seconds")
-    max_ons = max(all_ons)
-    return list_of_stops, max_ons
+    return list_of_stops
 
 
 def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, trip_plan, intervals=15):
@@ -276,17 +265,46 @@ def manually_insert_allocation_events(bus_arrival_events, starting_date, buses, 
     return bus_arrival_events
 
 
+def load_disruption_chains(config, buses):
+    chains = config.get("pool_thread_count", 0)
+    disruptions_df = pd.read_parquet(f"./prepped_disruptions.parquet")
+    date_str = dateparser.parse(config["starting_date_str"], date_formats=["%Y%m%d"]).strftime("%Y-%m-%d")
+    disruptions_df = disruptions_df.query("date == @date_str")
+    disruption_event_chains = []
+    for chain in range(chains + 1):
+        disruption_chain = []
+        chain_disruption_df = disruptions_df[disruptions_df["chain"] == chain]
+        if not chain_disruption_df.empty:
+            dc = dict(zip(chain_disruption_df.bus_id, chain_disruption_df.scheduled_time))
+            for bus_id, breakdown_datetime_str in dc.items():
+                disruption_event = manually_insert_disruption(
+                    buses=buses,
+                    bus_id=bus_id,
+                    time=str_timestamp_to_datetime(breakdown_datetime_str),
+                )
+                if disruption_event is not None:
+                    disruption_chain.append(disruption_event)
+        if len(disruption_chain) <= 0:
+            disruption_event_chains.append([])
+        else:
+            disruption_event_chains.append(disruption_chain)
+    return disruption_event_chains
+
+
 # Almost the same as the main function.
-def run_simulation(config, chain=None):
-    # logger = None
+def run_simulation(config):
+    LOOKUP_DIR = f"{BASE_DIR}/scenarios"
     logger = logging.getLogger("debuglogger")
+    starting_date_str = config["starting_date_str"]
+    noise_label = str(config.get("noise_level", ""))
+    if noise_label:
+        REALWORLD_DIR = f'{LOOKUP_DIR}/{config["real_world_dir"]}/{starting_date_str}_noise_{noise_label}'
+    else:
+        REALWORLD_DIR = f'{LOOKUP_DIR}/{config["real_world_dir"]}/{starting_date_str}'
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config["starting_date_str"]
-    REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}'
-    trip_plan_path = (
-        f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}/trip_plan_{starting_date_str}.json'
-    )
+    trip_plan_path = f"{REALWORLD_DIR}/trip_plan_{starting_date_str}.json"
 
     with open(trip_plan_path) as f:
         trip_plan = json.load(f)
@@ -301,12 +319,11 @@ def run_simulation(config, chain=None):
     with open(bus_plan_path) as f:
         bus_plan = json.load(f)
 
-    LOOKUP_DIR = f"{BASE_DIR}/scenarios"
+    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, config=config)
+
     start_time = time.time()
-    travel_model = EmpiricalTravelModelLookup(LOOKUP_DIR, starting_date_str, config=config, logger=None)
     elapsed_time = time.time() - start_time
     print(f"Lookup loading time: {elapsed_time:.2f} s")
-    dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
 
     # TODO: Move to environment model once i know it works
     valid_actions = None
@@ -316,39 +333,12 @@ def run_simulation(config, chain=None):
     Buses, Stops, active_stops = load_initial_state(starting_date_str, bus_plan, trip_plan, config, random_seed=100)
     # print(f"Count buses: {len(Buses)}")
 
-    bus_arrival_events, active_trips = load_events(
-        REALWORLD_DIR, travel_model, starting_date_str, Buses, Stops, trip_plan
-    )
+    bus_arrival_events, active_trips = load_events(travel_model, starting_date_str, Buses, trip_plan)
 
-    stop_chains, max_ons = load_passengers_events(
-        Stops, active_stops, REALWORLD_DIR, starting_date_str, chain=chain, active_trips=active_trips
-    )
-    # print(dt.datetime.now())
+    stop_chains = load_passengers_events(Stops, active_stops, config, active_trips=active_trips)
 
-    bus_arrival_events = bus_arrival_events
-
-    # Injecting incident
-    breakdowns = config.get("breakdowns", False)
-    if breakdowns:
-        # log(logger, dt.datetime.now(), f"breakdowns are provided: {breakdowns}.", LogType.INFO)
-        for bus_id, breakdown_datetime_str in breakdowns.items():
-            bus_arrival_events = manually_insert_disruption(
-                bus_arrival_events, buses=Buses, bus_id=bus_id, time=str_timestamp_to_datetime(breakdown_datetime_str)
-            )
-    else:
-        print(f"Breakdowns: chain {chain} has no breakdowns: {breakdowns}")
-        # raise "No breakdowns key present, even with val: False"
-
-    bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
-
-    # HACK because of my weird simulation event pop, duplicate the first event
-    bus_arrival_events.insert(0, bus_arrival_events[0])
-
-    starting_state = copy.deepcopy(
-        State(stops=stop_chains[0], buses=Buses, bus_events=bus_arrival_events, time=bus_arrival_events[0].time)
-    )
-
-    starting_state.stop_chains = stop_chains
+    # Load disruption chains
+    disruption_chains = load_disruption_chains(config, buses=Buses)
 
     # Adding interval events
     if config["reallocation"]:
@@ -360,18 +350,32 @@ def run_simulation(config, chain=None):
 
         log(logger, dt.datetime.now(), f"Initial interval decision events: {after_count - before_count}", LogType.INFO)
 
-    rollout_policy = BareMinimumRollout(
-        rollout_horizon_delta_t=config["rollout_horizon_delta_t"], dispatch_policy=dispatch_policy
+    # Chain 0 is the "real world" chain
+    bus_arrival_events.extend(disruption_chains[0])
+    bus_arrival_events.sort(key=lambda x: x.time, reverse=False)
+
+    # HACK because of my weird simulation event pop, duplicate the first event
+    bus_arrival_events.insert(0, bus_arrival_events[0])
+
+    starting_state = copy.deepcopy(
+        State(stops=stop_chains[0], buses=Buses, bus_events=bus_arrival_events, time=bus_arrival_events[0].time)
     )
+
+    starting_state.stop_chains = stop_chains
+    starting_state.disruption_chains = disruption_chains
 
     mcts_discount_factor = config["mcts_discount_factor"]
     lookahead_horizon_delta_t = config["lookahead_horizon_delta_t"]
+    rollout_horizon_delta_t = config["rollout_horizon_delta_t"]
     uct_tradeoff = config["uct_tradeoff"]
-    # uct_tradeoff = max_ons
     pool_thread_count = config["pool_thread_count"]
     iter_limit = config["iter_limit"]
     allowed_computation_time = config["allowed_computation_time"]
     mcts_type = MCTSType.MODULAR_MCTS
+
+    # Class setup
+    dispatch_policy = SendNearestDispatchPolicy(travel_model)  # RandomDispatch(travel_model)
+    rollout_policy = BareMinimumRollout(rollout_horizon_delta_t, dispatch_policy=dispatch_policy)
 
     heuristic_dispatch = HeuristicDispatch(travel_model)
     mdp_environment_model = DecisionEnvironmentDynamics(
@@ -379,7 +383,7 @@ def run_simulation(config, chain=None):
     )
 
     sim_environment = EnvironmentModelFast(travel_model, config)
-    if config["method"] == "MCTS":
+    if config["method"].upper() == "MCTS":
         decision_maker = DecisionMaker(
             environment_model=sim_environment,
             travel_model=travel_model,
@@ -398,7 +402,7 @@ def run_simulation(config, chain=None):
             base_dir=f"{BASE_DIR}/scenarios",
             config=config,
         )
-    elif config["method"] == "baseline":
+    elif config["method"].upper() == "BASELINE":
         decision_maker = NearestCoordinator(travel_model=travel_model, dispatch_policy=dispatch_policy, config=config)
 
     simulator = Simulator(
@@ -433,6 +437,7 @@ if __name__ == "__main__":
         config = json.load(f)
 
     _dir = "."
+
     filename = config["mcts_log_name"]
     exp_log_path = f"{_dir}/logs/{config['starting_date_str']}_{filename}"
     exp_res_path = f"{_dir}/results/{config['starting_date_str']}_{filename}"
@@ -461,13 +466,17 @@ if __name__ == "__main__":
     streamHandler.setFormatter(logFormatter)
     streamHandler.setLevel(logging.DEBUG)
 
-    # logger.addHandler(fileHandler)
-    logger.addHandler(logging.NullHandler())
-    # logger.addHandler(streamHandler)
+    if config.get("save_debug_log", False):
+        logger.addHandler(fileHandler)
+    else:
+        logger.addHandler(logging.NullHandler())
+
+    if config.get("show_stream_log", False):
+        logger.addHandler(streamHandler)
 
     logger.debug("Starting process.")
-    logger.debug(f"pool_thread_count: {config.get('pool_thread_count', 0)}")
-    run_simulation(config, chain=config.get("pool_thread_count", 0))
+
+    run_simulation(config)
 
     if config.get("send_mail", False):
         emailer(config_path)

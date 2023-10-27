@@ -1,7 +1,7 @@
 from Environment.enums import BusStatus, BusType, ActionType, EventType
 from src.utils import *
 import itertools
-import random
+import pandas as pd
 import copy
 
 
@@ -20,6 +20,7 @@ class NearestCoordinator:
     def generate_possible_actions(self, state, action_type=ActionType.OVERLOAD_ALL):
         # Find idle overload buses
         idle_overload_buses = []
+        broken_buses = []
         for bus_id, bus_obj in state.buses.items():
             if bus_obj.type == BusType.REGULAR:
                 continue
@@ -76,11 +77,13 @@ class NearestCoordinator:
 
         # TODO: Check if they will reach there within the next bus based on headway.
         elif action_type == ActionType.OVERLOAD_TO_BROKEN:
-            broken_buses = []
             for bus_id, bus_obj in state.buses.items():
                 if bus_obj.status == BusStatus.BROKEN:
                     if bus_obj.current_block_trip is not None:
-                        broken_buses.append(bus_id)
+                        if state.time <= (
+                            bus_obj.time_at_last_stop + pd.Timedelta(PASSENGER_TIME_TO_LEAVE, unit="min")
+                        ):
+                            broken_buses.append(bus_id)
 
             if len(broken_buses) > 0:
                 _valid_actions = [[ActionType.OVERLOAD_TO_BROKEN], idle_overload_buses, broken_buses]
@@ -92,6 +95,20 @@ class NearestCoordinator:
             valid_actions = [{"type": _va[0], "overload_bus": _va[1], "info": _va[2]} for _va in valid_actions]
         else:
             # No action
+            valid_actions = [do_nothing_action]
+
+        # Constraint on broken bus (broken buses should be serviced immediately if possible)
+        if len(broken_buses) > 0:
+            # if event and (event.event_type == EventType.VEHICLE_BREAKDOWN):
+            constrained_combo_actions = []
+            for action in valid_actions:
+                _action_type = action["type"]
+                if _action_type == ActionType.OVERLOAD_TO_BROKEN:
+                    if action not in constrained_combo_actions:
+                        constrained_combo_actions.append(action)
+            valid_actions = copy.copy(constrained_combo_actions)
+
+        if len(valid_actions) <= 0:
             valid_actions = [do_nothing_action]
 
         return valid_actions

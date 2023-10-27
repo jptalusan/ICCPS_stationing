@@ -2,6 +2,7 @@ import copy
 import math
 import random
 import time
+import pandas as pd
 from DecisionMaking.CentralizedMCTS.DataStructures.TreeNode import TreeNode
 from Environment.DataStructures.State import State
 from Environment.enums import ActionType, EventType
@@ -127,6 +128,7 @@ class ModularMCTS:
                     bus_events=copy.copy(root.state.bus_events),
                     time=root.state.time,
                 )
+                _new_state.people_left_behind = copy.deepcopy(root.state.people_left_behind)
 
                 actions_taken_to_new_node = copy.copy(root.action_sequence_to_here)
                 actions_taken_to_new_node.append(possible_action)
@@ -224,14 +226,15 @@ class ModularMCTS:
         _new_state = State(
             stops=copy.deepcopy(node.state.stops),
             buses=copy.deepcopy(node.state.buses),
-            bus_events=copy.copy(node.state.bus_events),
+            bus_events=copy.deepcopy(node.state.bus_events),
             time=node.state.time,
         )
+        _new_state.people_left_behind = copy.deepcopy(node.state.people_left_behind)
 
         # Taking action generates new events
         immediate_reward, new_events, event_time = self.mdp_environment_model.take_action(_new_state, action_to_take)
 
-        _new_node_future_event_queue = copy.copy(node.future_events_queue)
+        _new_node_future_event_queue = copy.deepcopy(node.future_events_queue)
         if new_events is not None:
             res = self.add_event_to_event_queue(_new_node_future_event_queue, new_events)
 
@@ -302,7 +305,7 @@ class ModularMCTS:
         event = events[0]
         if event:
             queue.append(event)
-            queue.sort(key=lambda _: _.time, reverse=False)
+        queue.sort(key=lambda _: _.time, reverse=False)
         return True
 
     def pick_expand_action(self, node):

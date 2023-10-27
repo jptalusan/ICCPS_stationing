@@ -1,6 +1,6 @@
 from src.utils import *
 import json
-import warnings
+import logging
 import pickle
 import pandas as pd
 import numpy as np
@@ -15,13 +15,20 @@ from Environment.enums import EventType, ActionType, BusType
 
 # For now should contain all travel related stuff (ons, loads, travel times, distances)
 class EmpiricalTravelModelLookup:
-    def __init__(self, base_dir, date_str, config, logger):
-        # config_path = f'{base_dir}/trip_plan_{date_str}_limited.json'
+    def __init__(self, base_dir, date_str, config):
+        noise_label = str(config.get("noise_level", ""))
+
         config_path = f'{base_dir}/{config["real_world_dir"]}/{date_str}/trip_plan_{date_str}.json'
+        if noise_label:
+            config_path = (
+                f'{base_dir}/{config["real_world_dir"]}/{date_str}_noise_{noise_label}/trip_plan_{date_str}.json'
+            )
+        else:
+            config_path = f'{base_dir}/{config["real_world_dir"]}/{date_str}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
-        self.logger = logger
+        self.logger = logging.getLogger("debuglogger")
 
         with open(f"{base_dir}/common/sampled_travel_times_dict.pkl", "rb") as handle:
             self.sampled_travel_time = pickle.load(handle)
@@ -98,12 +105,16 @@ class EmpiricalTravelModelLookup:
             return trip_data["stop_sequence"][current_stop_sequence + 1]
 
     def get_route_id_direction(self, current_block_trip):
-        current_trip = str(current_block_trip[1])
-        trip_data = self.trip_plan[current_trip]
-        route_id = trip_data["route_id"]
-        route_direction = trip_data["route_direction"]
-        res = f"{route_id}_{route_direction}"
-        return res
+        try:
+            current_trip = str(current_block_trip[1])
+            trip_data = self.trip_plan[current_trip]
+            route_id = trip_data["route_id"]
+            route_direction = trip_data["route_direction"]
+            res = f"{route_id}_{route_direction}"
+            return res
+        except Exception as e:
+            self.logger.error(f"get_route_id_direction error {e}, with block trip: {current_block_trip}")
+            return None
 
     def get_stop_id_at_number(self, current_block_trip, current_stop_sequence):
         if current_stop_sequence == -1:

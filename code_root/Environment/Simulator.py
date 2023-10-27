@@ -152,6 +152,11 @@ class Simulator:
             chosen_action = self.event_processing_callback(
                 _valid_actions, self.state, action_type=ActionType.OVERLOAD_DISPATCH
             )
+        elif update_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            chosen_action = self.event_processing_callback(
+                _valid_actions, self.state, action_type=ActionType.OVERLOAD_TO_BROKEN
+            )
+
         if chosen_action is None:
             chosen_action = {"type": ActionType.NO_ACTION, "overload_bus": None, "info": None}
 
@@ -231,7 +236,10 @@ class Simulator:
 
     def format_action_tuple(self, action_dict):
         # {'type': <ActionType.OVERLOAD_DISPATCH: 'overload_dispatch'>, 'overload_bus': '41', 'info': ('MXIDONEL', 17, Timestamp('2022-10-05 05:42:03.400000'), 6.0, (5504, '279150'), '55_TO DOWNTOWN')}
-        log_str = f"{action_dict['type'].value} bus: {action_dict['overload_bus']} to {action_dict['info'][0]} with {action_dict['info'][3]} people waiting since {action_dict['info'][2].strftime('%H:%M:%S')} at trip: {action_dict['info'][4]}"
+        if action_dict["type"] == ActionType.OVERLOAD_DISPATCH:
+            log_str = f"{action_dict['type'].value} bus: {action_dict['overload_bus']} to {action_dict['info'][0]} with {action_dict['info'][3]} people waiting since {action_dict['info'][2].strftime('%H:%M:%S')} at trip: {action_dict['info'][4]}"
+        else:
+            log_str = f"{action_dict}"
         return log_str
 
     def update_sim_info(self):

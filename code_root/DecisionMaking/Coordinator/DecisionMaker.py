@@ -1,16 +1,14 @@
 import copy
-import pickle
 import time
+import pandas as pd
 import numpy as np
 import datetime as dt
 from multiprocessing import Pool
-from Environment.DataStructures.Event import Event
-from Environment.enums import LogType, EventType, BusStatus, BusType, ActionType
+from Environment.enums import BusStatus, BusType, ActionType
 from DecisionMaking.CentralizedMCTS.ModularMCTS import ModularMCTS
-from Environment.DataStructures.State import State
 from src.utils import *
 import math
-from fastlogging import LogInit
+import logging
 
 """
 Combine the two files here:
@@ -33,8 +31,6 @@ def run_low_level_mcts(arg_dict):
     exploration_constant,
     discount_factor,
     rollout_policy,
-    # reward_function,
-    # travel_model,
     mdp_environment,
     MCTS_type
     :param arg_dict:
@@ -98,9 +94,7 @@ class DecisionMaker:
         self.time_taken = {}
 
         self.action_type = None
-        self.logger = LogInit(
-            pathName=f"logs/decision_maker_{config['mcts_log_name']}.log", console=False, colors=False
-        )
+        self.logger = logging.getLogger("debuglogger")
 
     # Call the MCTS in parallel here
     def get_trips_with_remaining_passengers(self, state, limit=None):
@@ -114,6 +108,9 @@ class DecisionMaker:
                 if remaining_passengers >= (VEHICLE_CAPACITY * OVERAGE_THRESHOLD):
                     block_id = p_set["block_id"]
                     trip_id = p_set["trip_id"]
+                    arrival_time = p_set["arrival_time"]
+                    if arrival_time + pd.Timedelta(30, unit="min") < state.time:
+                        continue
                     block_trip = (block_id, str(trip_id))
                     if block_trip in state.served_trips:
                         continue
@@ -123,8 +120,8 @@ class DecisionMaker:
                             block_trip,
                         )
                     )
-        trips_with_remaining = sorted(trips_with_remaining, key=lambda x: x[0], reverse=True)
         if limit:
+            trips_with_remaining = sorted(trips_with_remaining, key=lambda x: x[0], reverse=True)
             trips_with_remaining = trips_with_remaining[0 : limit - 1]
         trips_with_remaining = [i for i in trips_with_remaining if i]
         return trips_with_remaining
@@ -134,11 +131,11 @@ class DecisionMaker:
         # Only do something when buses are available?
 
         if len(self.get_trips_with_remaining_passengers(state)) <= 0 and action_type == ActionType.OVERLOAD_DISPATCH:
-            print(f"Event counter: {self.event_counter}")
-            print(f"Event: {state.bus_events[0]}")
-            print(f"Time: {state.time}")
-            print("no incidents detected")
-            print()
+            # print(f"Event counter: {self.event_counter}")
+            # print(f"Event: {state.bus_events[0]}")
+            # print(f"Time: {state.time}")
+            # print("no incidents detected")
+            # print()
             return None
 
         if self.any_available_overload_buses(state):
@@ -149,11 +146,11 @@ class DecisionMaker:
                 return None
             return chosen_action
         else:
-            print(f"Event counter: {self.event_counter}")
-            print(f"Event: {state.bus_events[0]}")
-            print(f"Time: {state.time}")
-            print("no available buses")
-            print()
+            # print(f"Event counter: {self.event_counter}")
+            # print(f"Event: {state.bus_events[0]}")
+            # print(f"Time: {state.time}")
+            # print("no available buses")
+            # print()
             return None
 
     def any_available_overload_buses(self, state):
@@ -174,15 +171,16 @@ class DecisionMaker:
             states = [state]
         else:
             CHAINS = self.pool_thread_count
-            event_queues = self.get_event_chains(state)
+            event_queues = self.get_event_chains(state, CHAINS)
             if CHAINS > 0:
                 event_queues = event_queues * CHAINS
-            states = [state] * CHAINS
+            # states = [state] * CHAINS
             states = []
             # TODO Can probably prune this based on state.time so it doesn't copy all
-            for chain in range(CHAINS):
+            # chain == 0 is real world chain so its not used here.
+            for chain in range(1, CHAINS + 1):
                 _state = copy.deepcopy(state)
-                _state.stops = copy.deepcopy(state.stop_chains[chain])
+                _state.stops = copy.deepcopy(state.stop_chains[chain - 1])
                 states.append(_state)
 
         if len(event_queues[0]) <= 0:
@@ -320,18 +318,18 @@ class DecisionMaker:
         avg_action_scores.sort(key=lambda _: _["avg_score"], reverse=True)
         time_taken = res_dict[0]["mcts_res"]["time_taken"]
 
-        print(f"Event counter: {self.event_counter}")
-        print(f"Event: {event_queues[0][0]}")
-        print(f"Time: {states[0].time}")
-        if self.pool_thread_count == 0:
-            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['num_visits']}") for sa in avg_action_scores]
-        else:
-            [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
-        print(f"time_taken:{time_taken}")
-        print(f"Decision maker time: {self.time_taken}")
-        self.logger.debug(f"Decision maker time: {self.time_taken['decision_maker']}")
-        print(f"Final action: {final_action}")
-        print()
+        # print(f"Event counter: {self.event_counter}")
+        # print(f"Event: {event_queues[0][0]}")
+        # print(f"Time: {states[0].time}")
+        # if self.pool_thread_count == 0:
+        #     [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['num_visits']}") for sa in avg_action_scores]
+        # else:
+        #     [print(f"{sa['action']}, {sa['avg_score']:.0f}, {sa['sum_visits']}") for sa in avg_action_scores]
+        # print(f"time_taken:{time_taken}")
+        # print(f"Decision maker time: {self.time_taken}")
+        # # self.logger.debug(f"Decision maker time: {self.time_taken['decision_maker']}")
+        # print(f"Final action: {final_action}")
+        # print()
 
         return final_action
 
@@ -390,17 +388,19 @@ class DecisionMaker:
         return [_events]
 
     # Generate processed chains using generate_chains_pickles.ipynb
-    def get_event_chains(self, state):
+    def get_event_chains(self, state, chains):
         event_chains = []
-        state_events = copy.copy(state.bus_events)
+        for chain in range(1, chains + 1):
+            state_events = copy.copy(state.bus_events)
+            state_events.extend(state.disruption_chains[chain])
+            # Rollout lookahead_horizon
+            if self.lookahead_horizon_delta_t:
+                lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
+                _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
+            else:
+                _events = [event for event in state_events if state.time <= event.time]
 
-        # Rollout lookahead_horizon
-        if self.lookahead_horizon_delta_t:
-            lookahead_horizon = state.time + dt.timedelta(seconds=self.lookahead_horizon_delta_t)
-            _events = [event for event in state_events if state.time <= event.time <= lookahead_horizon]
-        else:
-            _events = [event for event in state_events if state.time <= event.time]
+            _events.sort(key=lambda x: x.time, reverse=False)
 
-        event_chains.append(_events)
-
+            event_chains.append(_events)
         return event_chains

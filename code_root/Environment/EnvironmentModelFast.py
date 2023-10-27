@@ -28,12 +28,16 @@ class EnvironmentModelFast:
         new_events = []
         new_time = curr_event.time
 
+        # Special case for breakdowns (to save time)
+        if curr_event.event_type == EventType.VEHICLE_BREAKDOWN:
+            if new_time < state.time:
+                return new_events
         try:
             assert new_time >= state.time
         except AssertionError:
-            print(curr_event)
-            print(new_time)
-            print(state.time)
+            # print(curr_event)
+            # print(new_time)
+            # print(state.time)
             assert new_time >= state.time
 
         # print(curr_event)
@@ -48,10 +52,19 @@ class EnvironmentModelFast:
             type_specific_information = curr_event.type_specific_information
             event_bus_id = type_specific_information["bus_id"]
             current_block_trip = state.buses[event_bus_id].current_block_trip
-            state.buses[event_bus_id].status = BusStatus.BROKEN
-            current_stop = state.buses[event_bus_id].current_stop
-            log(self.csvlogger, new_time, f"Bus {event_bus_id} broken down near stop {current_stop}", LogType.ERROR)
-            self.handle_disruption_event(state, event_bus_id, current_stop)
+            if not should_log and current_block_trip is None:
+                pass
+            else:
+                state.buses[event_bus_id].status = BusStatus.BROKEN
+                current_stop = state.buses[event_bus_id].current_stop
+                if should_log:
+                    log(
+                        self.logger,
+                        new_time,
+                        f"Bus {event_bus_id} on trip {current_block_trip[1]}, broke down near stop {current_stop}",
+                        LogType.ERROR,
+                    )
+                self.handle_disruption_event(state, event_bus_id, current_stop, should_log)
 
         elif curr_event.event_type == EventType.VEHICLE_ARRIVE_AT_STOP:
             additional_info = curr_event.type_specific_information
@@ -117,12 +130,12 @@ class EnvironmentModelFast:
                         if BusType.OVERLOAD == bus_type:
                             state.buses[bus_id].total_deadkms_moved += distance
                             state.buses[bus_id].total_deadsecs_moved += travel_time
-                            log(
-                                self.logger,
-                                state.time,
-                                f"Bus {bus_id} moves {distance:.2f} deadkms.",
-                                LogType.DEBUG,
-                            )
+                            # log(
+                            #     self.logger,
+                            #     state.time,
+                            #     f"Bus {bus_id} moves {distance:.2f} deadkms.",
+                            #     LogType.DEBUG,
+                            # )
                         else:
                             state.buses[bus_id].distance_to_next_stop = distance
 
@@ -262,12 +275,12 @@ class EnvironmentModelFast:
                 message=f"Passenger time type: {type(passenger_time_to_leave)}",
                 type=LogType.ERROR,
             )
-            print(bus_id, type(passenger_time_to_leave))
+            # print(bus_id, type(passenger_time_to_leave))
         try:
             assert isinstance(arrival_time, dt.datetime)
         except:
             log(self.logger, curr_time=None, message=f"arrival_time type: {type(arrival_time)}", type=LogType.ERROR)
-            print(bus_id, type(arrival_time))
+            # print(bus_id, type(arrival_time))
 
         curr_stop = type_specific_information["stop_id"]
         current_stop_number = type_specific_information["stop"]
@@ -384,7 +397,8 @@ class EnvironmentModelFast:
         scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(curr_block_trip_id, current_stop_number)
 
         # if got_on_bus or offs:
-        if should_log and ((ons + offs + got_on_bus + remaining) > 0):
+        # if should_log and ((ons + offs + got_on_bus + remaining) > 0):
+        if should_log:
             log_str = f"""Bus {bus_id} on trip: {curr_trip_id} scheduled for {scheduled_arrival_time.strftime('%H:%M:%S')} \
 arrives at {curr_stop}: got_on:{got_on_bus:.0f}, on:{ons:.0f}, offs:{offs:.0f}, \
 remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
@@ -409,32 +423,44 @@ remain:{remaining:.0f}, bus_load:{bus_object.current_load:.0f}"""
     # TODO: How do we treat passengers from say, stop A and stop Y, given that the bus breaks down at stop Z, traveling to stop ZZ. (AA -> ZZ)
     # People who got on at stop A would they just leave since they effectively have been waiting for Ty - Ta.
     # Transfer people from the bus to the nearest stop
-    def handle_disruption_event(self, state, bus_id, stop_id):
+    def handle_disruption_event(self, state, bus_id, stop_id, should_log=True):
         bus_obj = state.buses[bus_id]
         stop_obj = state.stops[stop_id]
         curr_time = state.time
 
+        # BUG Bus breaksdown but is still arriving at stop (from rollout)
         current_block_trip = bus_obj.current_block_trip
         current_load = bus_obj.current_load
         current_stop_number = bus_obj.current_stop_number
         curr_route_id_direction = self.travel_model.get_route_id_direction(current_block_trip)
-        scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(current_block_trip, current_stop_number)
-        remaining_dict = {
-            "stop_id": stop_id,
-            "route_id_dir": curr_route_id_direction,
-            "block_id": int(current_block_trip[0]),
-            "trip_id": int(current_block_trip[1]),
-            "stop_sequence": current_stop_number,
-            "scheduled_time": pd.Timestamp(scheduled_arrival_time),
-            "arrival_time": curr_time,
-            "ons": current_load,
-            "offs": 0,
-        }
-        stop_obj.passenger_waiting_dict_list.append(remaining_dict)
+        if curr_route_id_direction:
+            scheduled_arrival_time = self.travel_model.get_scheduled_arrival_time(
+                current_block_trip, current_stop_number
+            )
+            remaining_dict = {
+                "stop_id": stop_id,
+                "route_id_dir": curr_route_id_direction,
+                "block_id": int(current_block_trip[0]),
+                "trip_id": int(current_block_trip[1]),
+                "stop_sequence": current_stop_number,
+                "scheduled_time": pd.Timestamp(scheduled_arrival_time),
+                "arrival_time": curr_time,
+                "ons": current_load,
+                "offs": 0,
+            }
+            stop_obj.passenger_waiting_dict_list.append(remaining_dict)
 
-        # TODO: I have to retroactively subtract ons from prior stops or hack, just subtract it from latest one. (total won't change)
-        stop_obj.total_passenger_ons -= current_load
-        return True
+            # TODO: I have to retroactively subtract ons from prior stops or hack, just subtract it from latest one. (total won't change)
+            stop_obj.total_passenger_ons -= current_load
+            return True
+        else:
+            log(
+                self.logger,
+                state.time,
+                f"Bus {bus_id} on trip: {current_block_trip} {stop_id} has an error.",
+                LogType.ERROR,
+            )
+            return False
 
     def get_remaining_passengers(self, state, arrival_time, curr_stop, curr_route_id_dir, curr_block_id):
         passenger_time_to_leave = self.config.get("passenger_time_to_leave_min", 30)

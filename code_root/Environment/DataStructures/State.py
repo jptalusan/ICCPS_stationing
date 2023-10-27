@@ -7,3 +7,4 @@ class State:
         self.people_left_behind = []
         self.served_trips = []
         self.stop_chains = []
+        self.disruption_chains = []

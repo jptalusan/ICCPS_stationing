@@ -50,6 +50,7 @@ class BareMinimumRollout:
             bus_events=None,
             time=node.state.time,
         )
+        _state.people_left_behind = copy.deepcopy(node.state.people_left_behind)
 
         # Why is possible_actions None?
         _node = TreeNode(
@@ -99,6 +100,10 @@ class BareMinimumRollout:
         ):
             valid_actions, _ = environment_model.generate_possible_actions(
                 node.state, node.event_at_node, action_type=ActionType.OVERLOAD_DISPATCH
+            )
+        elif node.event_at_node.event_type == EventType.VEHICLE_BREAKDOWN:
+            valid_actions, _ = environment_model.generate_possible_actions(
+                node.state, node.event_at_node, action_type=ActionType.OVERLOAD_TO_BROKEN
             )
         if len(valid_actions) > 0:
             # action_to_take = self.dispatch_policy.select_overload_to_dispatch(node.state, valid_actions)
