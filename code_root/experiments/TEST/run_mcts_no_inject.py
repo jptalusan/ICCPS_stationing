@@ -60,6 +60,8 @@ def load_initial_state(starting_date, bus_plan, trip_plan, config, random_seed=1
         bus_capacity = bus_info["vehicle_capacity"]
         bus_block_trips = np.asarray(bus_info["trips"])
 
+        if bus_type != BusType.OVERLOAD and len(bus_block_trips) <= 0:
+            continue
         bus_block_trips = [tuple(bus_block_trip) for bus_block_trip in bus_block_trips]
         for i, bus_block_trip in enumerate(bus_block_trips):
             block_id = bus_block_trip[0]
@@ -117,6 +119,8 @@ def load_events(travel_model, starting_date, Buses, trip_plan, event_file="", ra
                 continue
             blocks_trips = bus.bus_block_trips
 
+            if len(blocks_trips) <= 0:
+                continue
             # Start trip (assuming trips are in sequential order)
             block = blocks_trips[0][0]
             trip = blocks_trips[0][1]
