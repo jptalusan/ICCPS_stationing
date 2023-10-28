@@ -301,11 +301,7 @@ def run_simulation(config):
     LOOKUP_DIR = f"{BASE_DIR}/scenarios"
     logger = logging.getLogger("debuglogger")
     starting_date_str = config["starting_date_str"]
-    noise_label = str(config.get("noise_level", ""))
-    if noise_label:
-        REALWORLD_DIR = f'{LOOKUP_DIR}/{config["real_world_dir"]}/{starting_date_str}_noise_{noise_label}'
-    else:
-        REALWORLD_DIR = f'{LOOKUP_DIR}/{config["real_world_dir"]}/{starting_date_str}'
+    REALWORLD_DIR = f'{LOOKUP_DIR}/{config["real_world_dir"]}/{starting_date_str}'
 
     vehicle_count = config["vehicle_count"]
     starting_date_str = config["starting_date_str"]

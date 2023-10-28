@@ -19,12 +19,6 @@ class EmpiricalTravelModelLookup:
         noise_label = str(config.get("noise_level", ""))
 
         config_path = f'{base_dir}/{config["real_world_dir"]}/{date_str}/trip_plan_{date_str}.json'
-        if noise_label:
-            config_path = (
-                f'{base_dir}/{config["real_world_dir"]}/{date_str}_noise_{noise_label}/trip_plan_{date_str}.json'
-            )
-        else:
-            config_path = f'{base_dir}/{config["real_world_dir"]}/{date_str}/trip_plan_{date_str}.json'
         with open(config_path) as f:
             self.trip_plan = json.load(f)
 
