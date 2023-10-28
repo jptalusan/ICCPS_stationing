@@ -124,9 +124,16 @@ class EmpiricalTravelModelLookup:
         return trip_data["stop_id_original"][current_stop_sequence]
 
     def get_stop_number_at_id(self, current_block_trip, current_stop_id):
+        stop_idx = 0
         current_trip = str(current_block_trip[1])
         trip_data = self.trip_plan[current_trip]
-        stop_idx = trip_data["stop_id_original"].index(current_stop_id)
+        try:
+            stop_idx = trip_data["stop_id_original"].index(current_stop_id)
+        except:
+            for i, s in enumerate(trip_data["stop_id_original"]):
+                if current_stop_id in s[0:3]:
+                    stop_idx = i
+                    break
         return trip_data["stop_sequence"][stop_idx]
 
     def get_scheduled_arrival_time(self, current_block_trip, current_stop_sequence):

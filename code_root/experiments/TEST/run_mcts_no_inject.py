@@ -193,10 +193,6 @@ def load_passengers_events(Stops, active_stops, config, active_trips=[]):
     chain = config.get("pool_thread_count", 0)
     starting_date_str = config["starting_date_str"]
     noise_label = str(config.get("noise_level", ""))
-    if noise_label:
-        REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}_noise_{noise_label}'
-    else:
-        REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}'
     print(f"Start passenger data load.")
     start = time.time()
     list_of_stops = []
@@ -206,12 +202,17 @@ def load_passengers_events(Stops, active_stops, config, active_trips=[]):
         _stops = copy.deepcopy(Stops)
         # HACK Switched df for testing
         if not c:
+            REALWORLD_DIR = f'{BASE_DIR}/scenarios/{config["real_world_dir"]}/{starting_date_str}'
             df = pd.read_parquet(f"{REALWORLD_DIR}/sampled_ons_offs_dict_{starting_date_str}.parquet")
-            print("Using initial chain.")
+            print(f"Using initial chain from {REALWORLD_DIR}.")
         else:
-            df = pd.read_parquet(f"{REALWORLD_DIR}/chains/ons_offs_dict_chain_{starting_date_str}_{chain - 1}.parquet")
+            if noise_label:
+                MCTSWORLD_DIR = f'{BASE_DIR}/scenarios/{config["mcts_world_dir"]}/{starting_date_str}_noise_{noise_label}'
+            else:
+                MCTSWORLD_DIR = f'{BASE_DIR}/scenarios/{config["mcts_world_dir"]}/{starting_date_str}'
+            df = pd.read_parquet(f"{MCTSWORLD_DIR}/chains/ons_offs_dict_chain_{starting_date_str}_{c - 1}.parquet")
 
-            print("Using chains")
+            print(f"Using chains from: {MCTSWORLD_DIR} with chain: {c - 1}")
         df["stop_id"] = np.where(df["stop_id"].str.startswith("MCC"), "MCC", df["stop_id"])
         df = df[df["stop_id"].isin(active_stops)]
         df = df[df["trip_id"].isin(active_trips)]
